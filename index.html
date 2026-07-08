@@ -229,7 +229,8 @@ main{animation:fadeUp .5s var(--ease-out) .08s both}
     <tr><td>Tab / Shift+Tab (목록에서)</td><td>들여쓰기 / 내어쓰기</td></tr>
     <tr><td>Ctrl+P</td><td>페이지 빠른 검색</td></tr>
     <tr><td>F1</td><td>현재 위치 다시 읽기</td></tr>
-    <tr><td>음성 명령</td><td>"새 페이지" · "읽어줘" · "제목 2로" · "받아쓰기 시작" · "뭐 할 수 있어"</td></tr>
+    <tr><td>DotPad</td><td>팬 키 블록 이동 · F1 위치 · F2 블록 메뉴 · F3 트리 · F4 전체 읽기</td></tr>
+    <tr><td>음성 명령</td><td>"새 페이지" · "읽어줘" · "제목 2로" · "받아쓰기 시작" · "닷패드 연결" · "버전" · "미매칭 목록"</td></tr>
   </table>
   <p style="margin-top:12px;font-size:12.5px;color:var(--textMuted)">스크린리더 사용 시 "음성 안내"를 끄면 모든 안내가 스크린리더 낭독으로만 전달됩니다.</p>
   <button class="btn-cta" style="margin-top:14px" onclick="this.closest('dialog').close()">닫기</button>
@@ -768,7 +769,7 @@ const RULES=[
   {kw:[["받아쓰기 시작",8],["받아 쓰기 시작",8]],run(){dictate=true;announce("받아쓰기 시작. 멈추려면 받아쓰기 끝.");}},
   {kw:[["받아쓰기 끝",8],["받아 쓰기 끝",8],["받아쓰기 그만",8]],run(){dictate=false;announce("받아쓰기 끝. 명령 모드입니다.");}},
   {kw:[["내보내",6],["점자 파일",6],["이브레일",6]],run(){exportEbrl();}},
-  {kw:[["뭐 할 수 있",7],["기능 목록",7],["도움말",6]],run(){announce("가능한 명령: 새 페이지, 검색, 읽어줘, 전체 읽어줘, 다음 블록, 제목 1로, 글머리로, 토글로, 구분선, 받아쓰기 시작, 내보내기, 페이지 삭제.");}},
+  {kw:[["뭐 할 수 있",7],["기능 목록",7],["도움말",6]],run(){announce("가능한 명령: 새 페이지, 검색, 읽어줘, 전체 읽어줘, 다음 블록, 제목 1로, 글머리로, 토글로, 구분선, 받아쓰기 시작, 내보내기, 페이지 삭제, 닷패드 연결, 버전, 미매칭 목록.");}},
 ];
 function navBlock(dir){
   const p=curPage(),vis=visibleIdx(),vi=vis.indexOf(state.focusIdx),n=vis[vi+dir];
@@ -858,5 +859,6 @@ setTimeout(()=>{
     "도트. 점으로 쓰는 노트. 빗금으로 블록 메뉴, 컨트롤 피 검색, 에프원 현재 위치. 도움말 버튼에서 전체 키를 확인하세요.");
 },600);
 </script>
+<script src="dotpad.js"></script>
 </body>
 </html>
