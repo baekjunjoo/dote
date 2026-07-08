@@ -1,0 +1,15 @@
+{
+  "name": "Dote — 점으로 쓰는 노트",
+  "short_name": "Dote",
+  "description": "시각장애인이 완전히 사용 가능한 노션형 노트 — 스크린리더·키보드·음성·점자 출력 지원",
+  "lang": "ko",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#F5F2ED",
+  "theme_color": "#F5F2ED",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
