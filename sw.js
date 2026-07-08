@@ -1,6 +1,6 @@
 /* Dote 서비스 워커 — 오프라인 우선 (PRD §7: 점역·편집은 네트워크 없이 동작) */
-const C = "dote-v1";
-const CORE = ["./", "index.html", "braille.js", "ebraille.js", "manifest.webmanifest", "icon.svg"];
+const C = "dote-v2";
+const CORE = ["./", "index.html", "braille.js", "ebraille.js", "dotpad.js", "manifest.webmanifest", "icon.svg"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(C).then(c => c.addAll(CORE)));
   self.skipWaiting();
