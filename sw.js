@@ -1,5 +1,5 @@
 /* Dote 서비스 워커 — 오프라인 우선 (PRD §7: 점역·편집은 네트워크 없이 동작) */
-const C = "dote-v2";
+const C = "dote-v3";
 const CORE = ["./", "index.html", "braille.js", "ebraille.js", "dotpad.js", "manifest.webmanifest", "icon.svg"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(C).then(c => c.addAll(CORE)));
@@ -14,7 +14,7 @@ self.addEventListener("fetch", e => {
     caches.match(e.request).then(r => r || fetch(e.request).then(res => {
       const copy = res.clone();
       const u = e.request.url;
-      if (res.ok && (u.startsWith(self.location.origin) || u.includes("fonts.googleapis") || u.includes("fonts.gstatic"))) {
+      if (res.ok && (u.startsWith(self.location.origin) || u.includes("fonts.googleapis") || u.includes("fonts.gstatic") || u.includes("cdn.jsdelivr.net"))) {
         caches.open(C).then(c => c.put(e.request, copy));
       }
       return res;
