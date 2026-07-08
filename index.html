@@ -154,17 +154,8 @@ aside.sidebar.collapsed{width:0;border-right:none}
 #editorScroll::-webkit-scrollbar{width:6px}
 #editorScroll::-webkit-scrollbar-thumb{background:var(--borderStrong);border-radius:3px}
 
-/* 커버 */
-.cover-area{
-  height:160px;flex-shrink:0;position:relative;
-  background:linear-gradient(160deg,#E8E8E8 0%,#F5F0E8 30%,#EDE4C0 65%,#E8D98A 100%);
-}
-.cover-area::after{
-  content:'';position:absolute;inset:auto 0 0 0;height:60px;
-  background:linear-gradient(to bottom,transparent,rgba(250,248,244,.6));
-}
 #editor{max-width:720px;margin:0 auto;padding:0 60px 120px;width:100%}
-.page-meta{padding-top:28px;margin-bottom:16px}
+.page-meta{padding-top:72px;margin-bottom:16px}
 #icoBtn{font-size:48px;line-height:1;padding:4px;border-radius:var(--r-md);margin-bottom:10px;display:block}
 #icoBtn:hover{background:var(--surfaceHov)}
 #icoBtn.empty{font-family:var(--font-ko);font-size:12px;color:var(--textDim);border:1px dashed var(--border);padding:6px 10px}
@@ -349,7 +340,6 @@ dialog td:first-child{font-family:var(--font-en);font-size:11px;color:var(--text
       </div>
     </div>
     <div id="editorScroll">
-      <div class="cover-area" role="img" aria-label="페이지 커버 — 재패니즈 그라디언트"></div>
       <div id="editor" aria-label="문서 편집기">
         <div class="page-meta">
           <button id="icoBtn" aria-label="페이지 아이콘 변경"></button>
