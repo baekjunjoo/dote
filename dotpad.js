@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.5.0 (2026-07-08)";
+const DOTE_VERSION="0.6.0 (2026-07-08)";
 
 /* ─────────── [1] voice-io: TTS 언어 감지·음성 선택·정밀 에코 가드 ─────────── */
 function detectTextLang(s){
@@ -73,7 +73,7 @@ matchCmd=function(text){
   return ok;
 };
 
-/* ─────────── [3] tactile-ux: 버전 확인·미매칭 목록·DotPad 음성 명령 ─────────── */
+/* ─────────── [3] tactile-ux·korean-braille·ebraille: 추가 명령 ─────────── */
 RULES.push(
   {kw:[["버전",6],["version",6]],run(){announce(`도트 버전 ${DOTE_VERSION}.`);}},
   {kw:[["미매칭 목록",8],["못 알아들은",7]],run(){
@@ -84,15 +84,33 @@ RULES.push(
     try{navigator.clipboard.writeText(l.map(x=>x.s).join("\n"));}catch(e){}
   }},
   {kw:[["닷패드 연결",8],["닷 패드 연결",8],["dotpad",6]],run(){BLE.connect();}},
-  {kw:[["닷패드 해제",8],["닷 패드 해제",8]],run(){BLE.disconnect();}}
+  {kw:[["닷패드 해제",8],["닷 패드 해제",8]],run(){BLE.disconnect();}},
+  /* korean-braille: 점자 등급 전환 (g2 약자 ↔ g1 풀어쓰기) */
+  {kw:[["약자로",7],["점자 약자",8]],run(){KB.setGrade("g2");refreshBrailleLine();announce("점자 약자 모드. 한국 점자 약자와 UEB 2급으로 표시합니다.");}},
+  {kw:[["풀어쓰기",8],["점자 풀어",7],["1급으로",6]],run(){KB.setGrade("g1");refreshBrailleLine();announce("점자 풀어쓰기 모드. 자모 단위로 표시합니다.");}},
+  /* ebraille-format 보완: 유니코드 점자 텍스트(.txt) 내보내기 */
+  {kw:[["점자 텍스트",9],["점자 티엑스티",8]],run(){exportBrailleTxt();}}
 );
+function refreshBrailleLine(){
+  const b=curPage().blocks[state.focusIdx];
+  renderBraille(b?b.text:"");
+}
+function exportBrailleTxt(){
+  const p=curPage();
+  const lines=p.blocks.filter(b=>b.text&&b.text.trim()).map(b=>EB.textToBraille(b.text));
+  if(!lines.length){announce("내보낼 내용이 없습니다.");return;}
+  const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=pTitle(p)+".brl.txt";a.click();URL.revokeObjectURL(a.href);
+  announce(`${pTitle(p)} 문서를 유니코드 점자 텍스트로 내보냈습니다. ${lines.length}줄.`);
+}
 
 /* ─────────── [4] dotpad-dev: DotPad BLE 드라이버 ───────────
    계약(실기기 검증 — 의미 변경 금지):
    - 행단위 displayLineData만 사용(전체 전송 금지), keep-alive 1초, 마이크로배치(setTimeout 0)
    - 그래픽 셀 인코딩: bit = y%4 + (x%2)*4, 행우선 10행×30셀
    - onMessage 'Connected' 수신 후에만 전송 시작
-   - 1순위 공식 SDK(./DotPadSDK-3.0.0.js), 없으면 안내 후 중단(그레이스풀) */
+   - 공식 SDK(./DotPadSDK-3.0.0.js) 탑재됨 — 콜백은 연결 전 등록 */
 const BLE={
   connected:false,sdk:null,dev:null,DM:null,
   lastRows:[],_ka:null,_flushT:null,_lastTextHex:"",
@@ -128,17 +146,23 @@ const BLE={
     if(!navigator.bluetooth){announce("이 브라우저는 웹 블루투스를 지원하지 않습니다. 크롬 또는 엣지에서 열어주세요.");return;}
     announce("닷패드를 찾는 중입니다. 잠시만요.");   /* 무음 무시 금지 */
     this.loadSDK().then(m=>{
-      const SDK=m.DotPadSDK||m.default||window.DotPadSDK;
-      const Scanner=m.DotPadScanner||window.DotPadScanner;
-      this.sdk=new SDK();
-      this.DM=m.DisplayMode||window.DisplayMode||{GraphicMode:0,TextMode:1};
-      return new Scanner().startBleScan().then(d=>this.sdk.connectBleDevice(d));
+      if(!this.sdk){
+        this.sdk=new m.DotPadSDK();
+        this.DM=m.DisplayMode;
+        /* 콜백은 연결 전에 등록 — Connected 메시지 누락 방지. 시그니처 (device, code/key, data) */
+        this.sdk.setCallBack((dev,code)=>this.onMessage(code),(dev,key)=>this.onKey(key));
+      }
+      return new m.DotPadScanner().startBleScan();
+    }).then(d=>{
+      if(!d){announce("기기 선택이 취소되었습니다.");return;}
+      announce("연결 중입니다. 잠시만요.");
+      return this.sdk.connectBleDevice(d);
     }).then(dev=>{
-      this.dev=dev;
-      this.sdk.setCallBack(msg=>this.onMessage(msg),(key,device)=>this.onKey(key,device));
+      if(dev)this.dev=dev;                            /* Connected 안내는 onMessage에서 */
+      else if(dev===null)announce("닷패드 연결에 실패했습니다. 기기 전원과 블루투스를 확인하세요.");
     }).catch(e=>{
       if(String(e.message).includes("no sdk"))
-        announce("닷패드 SDK 파일이 없습니다. 저장소에 DotPadSDK-3.0.0.js를 추가하면 실기기 연결이 활성화됩니다.");
+        announce("닷패드 SDK 파일을 불러오지 못했습니다. 새로고침 후 다시 시도하세요.");
       else announce("닷패드 연결에 실패했습니다. "+(e.message||""));
     });
   },
@@ -230,6 +254,7 @@ const BLE={
     const b=curPage().blocks[state.focusIdx];this.pushText(b?b.text:"");}
 };
 window.BLE=BLE;window.DOTE_VERSION=DOTE_VERSION;   /* 콘솔 디버깅·테스트용 노출 */
+window.exportBrailleTxt=exportBrailleTxt;
 
 /* ─────────── [5] 앱 훅: 연결 버튼 + 상태 연동 ─────────── */
 (function(){

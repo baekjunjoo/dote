@@ -45,6 +45,20 @@ const PAGE_TEMPLATES=[
      nb("callout","주제: "),
      nb("h2","아이디어"),nb("ul",""),nb("ul",""),nb("ul",""),
      nb("h2","다음 단계"),nb("todo","")]};}},
+  {icon:"🧪",name:"시연 준비",desc:"DotPad 시연 체크리스트 (demo-playbook)",
+   make(){return{title:"시연 준비",icon:"🧪",blocks:[
+     nb("callout","장소: 　일시: 　브라우저: Chrome/Edge (Safari·Firefox 불가)"),
+     nb("h2","전날 준비"),
+     nb("todo","\"버전\" 음성 명령으로 배포 확인"),
+     nb("todo","TTS 음성·마이크 감쇠 동작 확인"),
+     nb("todo","DotPad 충전 + 페어링 + 표시 확인"),
+     nb("todo","오프라인 대비 — 현장 인터넷 불확실하면 사전 로드"),
+     nb("todo","시연 콘텐츠 준비"),
+     nb("h2","현장 세팅"),
+     nb("todo","블루투스 스피커 금지 — 유선/내장 스피커 사용"),
+     nb("todo","NVDA 참석자 있으면 음성 안내 끄기 (이중발화 방지)"),
+     nb("toggle","트러블슈팅 (접어두기)"),
+     Object.assign(nb("p","BLE 안 붙음: 블루투스 꺼다 켜기 → 재페어링. 미매칭 발생: \"미매칭 목록\"으로 클립보드 복사 후 전달. 화면만 바뀌고 기기 그대로: 기기 전원 재시작 후 재연결."),{indent:1})]};}},
 ];
 
 function applyTemplate(t){
