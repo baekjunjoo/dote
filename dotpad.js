@@ -1,9 +1,19 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.7.0 (2026-07-08)";
+const DOTE_VERSION="0.8.0 (2026-07-08)";
 
-/* ─────────── [1] voice-io: TTS 언어 감지·음성 선택·정밀 에코 가드 ─────────── */
+/* ─────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ─────────── */
+(function(){
+  const s=document.createElement("script");s.src="superdot-tts.js";
+  s.onload=()=>{
+    SDTTS.configure({uiLang:"ko",vol:100,volMic:50,rate:105});
+    SDTTS.setMicActive(micOn);
+  };
+  document.body.appendChild(s);
+})();
+
+/* ─────────── [1] voice-io: TTS 언어 감지·음성 선택 (SDTTS 미로드 폴백용) ─────────── */
 function detectTextLang(s){
   if(/[가-ퟣ]/.test(s))return "ko";
   if(/[぀-ヿ]/.test(s))return "ja";
@@ -19,15 +29,16 @@ function pickVoiceFor(code){
     if(!vs.length)return null;
     const score=v=>/natural|neural/i.test(v.name)?3:(/google/i.test(v.name)?2:(/premium/i.test(v.name)?1:0));
     vs.sort((a,b)=>score(b)-score(a));
-    _voiceCache[code]=vs[0];                       /* 같은 언어 내 음성 고정(도중 교체 방지) */
+    _voiceCache[code]=vs[0];
     return vs[0];
   }catch(e){return null;}
 }
 if("speechSynthesis"in window)speechSynthesis.addEventListener("voiceschanged",()=>{for(const k in _voiceCache)delete _voiceCache[k];});
 
-/* 에코 가드 정규화 + 2-gram 겹침(voice-io 검증 로직) */
+/* 에코 가드: SDTTS 우선(발화 이력 자체 관리), 미로드 시 검증 로직 폴백 */
 function normEcho(s){return String(s).toLowerCase().replace(/[\s.,!?…'"“”‘’~\-()]+/g,"");}
 echoGuard=function(txt){
+  if(window.SDTTS)return SDTTS.isEcho(txt);
   const n=normEcho(txt);if(n.length<4)return false;
   const now=Date.now();
   for(let i=recentTTS.length-1;i>=0;i--){
@@ -41,18 +52,20 @@ echoGuard=function(txt){
   return false;
 };
 
-/* announce 교체: 문장 언어 자동감지 + 음성 선택 + 기존 aria-live/상태줄/감쇠 유지 */
+/* announce 교체: aria-live·상태줄 유지, 발화는 superdot-tts(언어감지·음성선별·감쇠) 우선 */
 announce=function(msg){
   const live=document.getElementById("live");
   live.textContent="";requestAnimationFrame(()=>live.textContent=msg);
   document.getElementById("statusLine").textContent=msg;
-  if(ttsOn&&"speechSynthesis"in window){
-    speechSynthesis.cancel();                       /* 연타 시 이전 발화 중단, 최신만 완주 */
+  if(!ttsOn)return;
+  if(window.SDTTS){SDTTS.speak(msg);return;}
+  if("speechSynthesis"in window){                   /* SDTTS 미로드 폴백 */
+    speechSynthesis.cancel();
     const u=new SpeechSynthesisUtterance(msg);
     const code=detectTextLang(msg);
     u.lang=code==="en"?"en-US":(code==="ja"?"ja-JP":"ko-KR");
     const v=pickVoiceFor(code);if(v)u.voice=v;
-    if(micOn)u.volume=.5;                           /* 마이크 사용 중 음량 감쇠 */
+    if(micOn)u.volume=.5;
     speechSynthesis.speak(u);
     recentTTS.push({t:Date.now(),s:msg});
     if(recentTTS.length>8)recentTTS.shift();
@@ -131,12 +144,14 @@ function minutesStart(){
   minutesRecog.onend=()=>{if(minutesRecog)try{minutesRecog.start();}catch(e){}};
   minutesRecog.onerror=ev=>{if(ev.error==="not-allowed"){minutesRecog=null;announce("마이크 권한이 필요합니다.");}};
   try{minutesRecog.start();
+    if(window.SDTTS)SDTTS.setMicActive(true);        /* 기록 중 TTS 감쇠 */
     announce("회의록 기록 시작. 문장마다 시각과 함께 자동 저장됩니다. 멈추려면 회의록 끝.");
   }catch(e){minutesRecog=null;announce("음성 인식을 시작할 수 없습니다.");}
 }
 function minutesStop(){
   if(!minutesRecog){announce("기록 중인 회의록이 없습니다.");return;}
   const r=minutesRecog;minutesRecog=null;try{r.onend=null;r.stop();}catch(e){}
+  if(window.SDTTS)SDTTS.setMicActive(micOn);
   const n=Math.max(0,curPage().blocks.length-2);
   announce(`회의록 기록 끝. ${n}개 문장을 저장했습니다.`);
 }
@@ -330,6 +345,12 @@ window.exportBrailleTxt=exportBrailleTxt;
   /* 페이지 전환·트리 변경 시 상태 라인 갱신 */
   const _rt=renderTree;
   renderTree=function(){_rt();if(BLE.connected)BLE.pushStatus();};
+
+  /* 마이크 토글 시 SDTTS 감쇠 연동 */
+  const _tm=toggleMic;
+  toggleMic=function(){_tm();if(window.SDTTS)SDTTS.setMicActive(micOn);};
+  const mic=document.getElementById("micBtn");
+  if(mic){const nm=mic.cloneNode(true);mic.parentNode.replaceChild(nm,mic);nm.addEventListener("click",()=>toggleMic());}
 
   /* ── [6] 페이지 템플릿 모듈 로드 ── */
   const ts=document.createElement("script");ts.src="templates.js";document.body.appendChild(ts);
