@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.6.0 (2026-07-08)";
+const DOTE_VERSION="0.7.0 (2026-07-08)";
 
 /* ─────────── [1] voice-io: TTS 언어 감지·음성 선택·정밀 에코 가드 ─────────── */
 function detectTextLang(s){
@@ -73,7 +73,7 @@ matchCmd=function(text){
   return ok;
 };
 
-/* ─────────── [3] tactile-ux·korean-braille·ebraille: 추가 명령 ─────────── */
+/* ─────────── [3] tactile-ux·korean-braille·ebraille·minutes: 추가 명령 ─────────── */
 RULES.push(
   {kw:[["버전",6],["version",6]],run(){announce(`도트 버전 ${DOTE_VERSION}.`);}},
   {kw:[["미매칭 목록",8],["못 알아들은",7]],run(){
@@ -89,7 +89,10 @@ RULES.push(
   {kw:[["약자로",7],["점자 약자",8]],run(){KB.setGrade("g2");refreshBrailleLine();announce("점자 약자 모드. 한국 점자 약자와 UEB 2급으로 표시합니다.");}},
   {kw:[["풀어쓰기",8],["점자 풀어",7],["1급으로",6]],run(){KB.setGrade("g1");refreshBrailleLine();announce("점자 풀어쓰기 모드. 자모 단위로 표시합니다.");}},
   /* ebraille-format 보완: 유니코드 점자 텍스트(.txt) 내보내기 */
-  {kw:[["점자 텍스트",9],["점자 티엑스티",8]],run(){exportBrailleTxt();}}
+  {kw:[["점자 텍스트",9],["점자 티엑스티",8]],run(){exportBrailleTxt();}},
+  /* dotpad-templates minutes: 회의록 기록 모드 (문장 단위 자동 보존) */
+  {kw:[["회의록 시작",9],["회의록 기록",8]],run(){minutesStart();}},
+  {kw:[["회의록 끝",9],["회의록 그만",9],["회의록 종료",9]],run(){minutesStop();}}
 );
 function refreshBrailleLine(){
   const b=curPage().blocks[state.focusIdx];
@@ -104,6 +107,40 @@ function exportBrailleTxt(){
   a.download=pTitle(p)+".brl.txt";a.click();URL.revokeObjectURL(a.href);
   announce(`${pTitle(p)} 문서를 유니코드 점자 텍스트로 내보냈습니다. ${lines.length}줄.`);
 }
+/* ── 회의록 기록: 전용 인식기 — 문장마다 [HH:MM] 블록으로 자동 저장 ── */
+let minutesRecog=null;
+function minutesStart(){
+  if(minutesRecog){announce("이미 회의록 기록 중입니다.");return;}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){announce("이 브라우저는 음성 인식을 지원하지 않습니다. 크롬 또는 엣지를 사용하세요.");return;}
+  if(micOn)toggleMic();                              /* 명령 마이크와 충돌 방지 */
+  const d=new Date(),z=n=>String(n).padStart(2,"0");
+  const p=newPage(null,`회의록 ${d.getMonth()+1}월 ${d.getDate()}일 ${z(d.getHours())}:${z(d.getMinutes())}`);
+  p.icon="📋";p.blocks=[nb("p","일시: "+d.toLocaleString("ko-KR")),nb("h2","기록")];
+  openPage(p.id);
+  minutesRecog=new SR();minutesRecog.lang="ko-KR";minutesRecog.continuous=true;minutesRecog.interimResults=false;
+  minutesRecog.onresult=e=>{
+    const t=e.results[e.results.length-1][0].transcript.trim();
+    if(!t||echoGuard(t))return;                      /* TTS 에코 폐기 */
+    if(/회의록\s?(끝|그만|종료)/.test(t)){minutesStop();return;}
+    const now=new Date(),ts=`[${z(now.getHours())}:${z(now.getMinutes())}] `;
+    curPage().blocks.push(nb("p",ts+t));             /* 문장 단위 자동 보존 */
+    renderBlocks();state.focusIdx=curPage().blocks.length-1;
+    queueBraille(t);touch();
+  };
+  minutesRecog.onend=()=>{if(minutesRecog)try{minutesRecog.start();}catch(e){}};
+  minutesRecog.onerror=ev=>{if(ev.error==="not-allowed"){minutesRecog=null;announce("마이크 권한이 필요합니다.");}};
+  try{minutesRecog.start();
+    announce("회의록 기록 시작. 문장마다 시각과 함께 자동 저장됩니다. 멈추려면 회의록 끝.");
+  }catch(e){minutesRecog=null;announce("음성 인식을 시작할 수 없습니다.");}
+}
+function minutesStop(){
+  if(!minutesRecog){announce("기록 중인 회의록이 없습니다.");return;}
+  const r=minutesRecog;minutesRecog=null;try{r.onend=null;r.stop();}catch(e){}
+  const n=Math.max(0,curPage().blocks.length-2);
+  announce(`회의록 기록 끝. ${n}개 문장을 저장했습니다.`);
+}
+window.minutesStart=minutesStart;window.minutesStop=minutesStop;
 
 /* ─────────── [4] dotpad-dev: DotPad BLE 드라이버 ───────────
    계약(실기기 검증 — 의미 변경 금지):
@@ -180,7 +217,7 @@ const BLE={
     if(code==="Connected"){                          /* BoardInfo 동기화 후에만 전송 시작 */
       this.connected=true;
       const b=document.getElementById("bleBtn");if(b){b.setAttribute("aria-pressed","true");b.textContent="DotPad 연결됨";}
-      announce("닷패드 연결됨. 팬 키로 블록 이동, 에프원 위치 읽기, 에프사 전체 읽기.");  /* 로드 인트로에 키 사용법 */
+      announce("닷패드 연결됨. 본문은 그래픽 영역 멀티라인 점자로, 위치와 날짜는 텍스트 라인으로 표시됩니다. 팬 키 블록 이동, 에프원 위치 읽기.");
       this.pushAll();
       this._ka=setInterval(()=>{                     /* keep-alive: 1초마다 1행 재전송 */
         if(!this.connected)return;
@@ -202,7 +239,7 @@ const BLE={
       announce(`${pTitle(p)} 페이지, 블록 ${state.focusIdx+1}/${p.blocks.length}, ${b?TYPES[b.type]:""}. ${b&&b.text?b.text:"빈 블록"}`);
     }
     else if(key==="KeyFunction2"){openSlash(state.focusIdx);}
-    else if(key==="KeyFunction3"){const t=document.querySelector('[role="treeitem"]');if(t){t.focus();announce("페이지 트리로 이동");}}
+    else if(key==="KeyFunction3"){const t=document.querySelector('[role="treeitem"]');if(t){t.focus();this.drawTree();announce("페이지 트리로 이동. 촉각 계층도를 표시합니다.");}}
     else if(key==="KeyFunction4"){const p=curPage();announce(pTitle(p)+". "+p.blocks.map(b=>b.text).filter(Boolean).join(". "));}
     else announce("잠시만요.");                       /* 무시되는 입력도 응답 */
   },
@@ -231,8 +268,29 @@ const BLE={
       this.sdk.displayLineData(0,0,hex,this.DM.TextMode,this.dev);
     }catch(e){}
   },
+  /* 텍스트 라인(20셀) = 상태 표시: 블록 위치 + 작성일 */
+  pushStatus(){
+    if(!this.connected)return;
+    const p=curPage(),d=new Date(p.created||Date.now());
+    this.pushText(`${state.focusIdx+1}/${p.blocks.length} ${d.getMonth()+1}-${d.getDate()}`);
+  },
+  /* 그래픽 영역(60×40) = 멀티라인 점자: 20셀×10줄, 셀 피치 3×4px (페이지 방식) */
+  pushDoc(text){
+    if(!this.connected)return;
+    this.buf.fill(0);
+    const POS={1:[0,0],2:[0,1],3:[0,2],4:[1,0],5:[1,1],6:[1,2],7:[0,3],8:[1,3]};
+    const cells=text?KB.brailleCells(text):[];
+    /* 타이핑 실시간 추적: 200셀 초과 시 마지막 페이지(줄 정렬) 표시 */
+    const start=cells.length>200?Math.ceil((cells.length-200)/20)*20:0;
+    const win=cells.slice(start,start+200);
+    win.forEach((dots,i)=>{
+      const cx=(i%20)*3,cy=Math.floor(i/20)*4;
+      dots.forEach(dt=>{const q=POS[dt];if(q)this.set(cx+q[0],cy+q[1]);});
+    });
+    this.requestPush();
+  },
 
-  /* 페이지 트리 계층도 → 촉각 그래픽 (선 굵게 2px, 과밀 금지) */
+  /* 페이지 트리 계층도 → 촉각 그래픽 (F3에서 일시 표시) */
   drawTree(){
     this.buf.fill(0);
     const flat=[];
@@ -250,8 +308,9 @@ const BLE={
     this.requestPush();
   },
   set(x,y){if(x>=0&&x<60&&y>=0&&y<40)this.buf[y*60+x]=1;},
-  pushAll(){this.lastRows=[];this._lastTextHex="";this.drawTree();
-    const b=curPage().blocks[state.focusIdx];this.pushText(b?b.text:"");}
+  pushAll(){this.lastRows=[];this._lastTextHex="";
+    const b=curPage().blocks[state.focusIdx];
+    this.pushDoc(b?b.text:"");this.pushStatus();}
 };
 window.BLE=BLE;window.DOTE_VERSION=DOTE_VERSION;   /* 콘솔 디버깅·테스트용 노출 */
 window.exportBrailleTxt=exportBrailleTxt;
@@ -265,12 +324,12 @@ window.exportBrailleTxt=exportBrailleTxt;
   const help=document.getElementById("helpBtn");
   help.parentNode.insertBefore(btn,help);
 
-  /* 점자 라인 갱신 시 실기기 텍스트 라인도 갱신 */
+  /* 점자 라인 갱신 시 실기기 갱신: 본문→멀티라인 점자, 상태→텍스트 라인 */
   const _rb=renderBraille;
-  renderBraille=function(text){_rb(text);BLE.pushText(text);};
-  /* 페이지 전환·트리 변경 시 촉각 트리 갱신 */
+  renderBraille=function(text){_rb(text);BLE.pushDoc(text);BLE.pushStatus();};
+  /* 페이지 전환·트리 변경 시 상태 라인 갱신 */
   const _rt=renderTree;
-  renderTree=function(){_rt();if(BLE.connected)BLE.drawTree();};
+  renderTree=function(){_rt();if(BLE.connected)BLE.pushStatus();};
 
   /* ── [6] 페이지 템플릿 모듈 로드 ── */
   const ts=document.createElement("script");ts.src="templates.js";document.body.appendChild(ts);
