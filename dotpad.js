@@ -1,9 +1,9 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.8.0 (2026-07-08)";
+const DOTE_VERSION="0.9.0 (2026-07-14)";
 
-/* ─────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ─────────── */
+/* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
   const s=document.createElement("script");s.src="superdot-tts.js";
   s.onload=()=>{
@@ -13,9 +13,9 @@ const DOTE_VERSION="0.8.0 (2026-07-08)";
   document.body.appendChild(s);
 })();
 
-/* ─────────── [1] voice-io: TTS 언어 감지·음성 선택 (SDTTS 미로드 폴백용) ─────────── */
+/* ─────────── [1] voice-io: TTS 언어 감지·음성 선택·정밀 에코 가드 ─────────── */
 function detectTextLang(s){
-  if(/[가-ퟣ]/.test(s))return "ko";
+  if(/[가-힣]/.test(s))return "ko";
   if(/[぀-ヿ]/.test(s))return "ja";
   if(/[A-Za-z]/.test(s))return "en";
   return "ko";
@@ -29,7 +29,7 @@ function pickVoiceFor(code){
     if(!vs.length)return null;
     const score=v=>/natural|neural/i.test(v.name)?3:(/google/i.test(v.name)?2:(/premium/i.test(v.name)?1:0));
     vs.sort((a,b)=>score(b)-score(a));
-    _voiceCache[code]=vs[0];
+    _voiceCache[code]=vs[0];                       /* 같은 언어 내 음성 고정(도중 교체 방지) */
     return vs[0];
   }catch(e){return null;}
 }
@@ -72,7 +72,7 @@ announce=function(msg){
   }
 };
 
-/* ─────────── [2] offline-matcher: 미매칭 로그(캡 100) — 성장 루프 ─────────── */
+/* ─────────── [2] offline-matcher: 미매칭 로그(캅 100) — 성장 루프 ─────────── */
 function missLog(){try{return JSON.parse(localStorage.getItem("dote_miss")||"[]");}catch(e){return[];}}
 function missAdd(t){
   const l=missLog();l.push({t:Date.now(),s:t});
@@ -86,7 +86,7 @@ matchCmd=function(text){
   return ok;
 };
 
-/* ─────────── [3] tactile-ux·korean-braille·ebraille·minutes: 추가 명령 ─────────── */
+/* ─────────── [3] tactile-ux: 버전 확인·미매칭 목록·DotPad 음성 명령 ─────────── */
 RULES.push(
   {kw:[["버전",6],["version",6]],run(){announce(`도트 버전 ${DOTE_VERSION}.`);}},
   {kw:[["미매칭 목록",8],["못 알아들은",7]],run(){
@@ -107,19 +107,6 @@ RULES.push(
   {kw:[["회의록 시작",9],["회의록 기록",8]],run(){minutesStart();}},
   {kw:[["회의록 끝",9],["회의록 그만",9],["회의록 종료",9]],run(){minutesStop();}}
 );
-function refreshBrailleLine(){
-  const b=curPage().blocks[state.focusIdx];
-  renderBraille(b?b.text:"");
-}
-function exportBrailleTxt(){
-  const p=curPage();
-  const lines=p.blocks.filter(b=>b.text&&b.text.trim()).map(b=>EB.textToBraille(b.text));
-  if(!lines.length){announce("내보낼 내용이 없습니다.");return;}
-  const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
-  a.download=pTitle(p)+".brl.txt";a.click();URL.revokeObjectURL(a.href);
-  announce(`${pTitle(p)} 문서를 유니코드 점자 텍스트로 내보냈습니다. ${lines.length}줄.`);
-}
 /* ── 회의록 기록: 전용 인식기 — 문장마다 [HH:MM] 블록으로 자동 저장 ── */
 let minutesRecog=null;
 function minutesStart(){
@@ -156,13 +143,26 @@ function minutesStop(){
   announce(`회의록 기록 끝. ${n}개 문장을 저장했습니다.`);
 }
 window.minutesStart=minutesStart;window.minutesStop=minutesStop;
+function refreshBrailleLine(){
+  const b=curPage().blocks[state.focusIdx];
+  renderBraille(b?b.text:"");
+}
+function exportBrailleTxt(){
+  const p=curPage();
+  const lines=p.blocks.filter(b=>b.text&&b.text.trim()).map(b=>EB.textToBraille(b.text));
+  if(!lines.length){announce("내보낼 내용이 없습니다.");return;}
+  const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+  a.download=pTitle(p)+".brl.txt";a.click();URL.revokeObjectURL(a.href);
+  announce(`${pTitle(p)} 문서를 유니코드 점자 텍스트로 내보냈습니다. ${lines.length}줄.`);
+}
 
 /* ─────────── [4] dotpad-dev: DotPad BLE 드라이버 ───────────
    계약(실기기 검증 — 의미 변경 금지):
    - 행단위 displayLineData만 사용(전체 전송 금지), keep-alive 1초, 마이크로배치(setTimeout 0)
    - 그래픽 셀 인코딩: bit = y%4 + (x%2)*4, 행우선 10행×30셀
    - onMessage 'Connected' 수신 후에만 전송 시작
-   - 공식 SDK(./DotPadSDK-3.0.0.js) 탑재됨 — 콜백은 연결 전 등록 */
+   - 1순위 공식 SDK(./DotPadSDK-3.0.0.js), 없으면 안내 후 중단(그레이스풀) */
 const BLE={
   connected:false,sdk:null,dev:null,DM:null,
   lastRows:[],_ka:null,_flushT:null,_lastTextHex:"",
@@ -232,7 +232,7 @@ const BLE={
     if(code==="Connected"){                          /* BoardInfo 동기화 후에만 전송 시작 */
       this.connected=true;
       const b=document.getElementById("bleBtn");if(b){b.setAttribute("aria-pressed","true");b.textContent="DotPad 연결됨";}
-      announce("닷패드 연결됨. 본문은 그래픽 영역 멀티라인 점자로, 위치와 날짜는 텍스트 라인으로 표시됩니다. 팬 키 블록 이동, 에프원 위치 읽기.");
+      announce("닷패드 연결됨. 팬 키로 블록 이동, 에프원 위치 읽기, 에프포 전체 읽기.");  /* 로드 인트로에 키 사용법 */
       this.pushAll();
       this._ka=setInterval(()=>{                     /* keep-alive: 1초마다 1행 재전송 */
         if(!this.connected)return;
@@ -242,7 +242,7 @@ const BLE={
       },1000);
     }else if(code==="Disconnected"||code==="ConnectedFail"){
       this._teardown();
-      announce(code==="Disconnected"?"닷패드 연결이 낊어졌습니다.":"닷패드 연결에 실패했습니다.");
+      announce(code==="Disconnected"?"닷패드 연결이 끊어졌습니다.":"닷패드 연결에 실패했습니다.");
     }
   },
   onKey(key){
@@ -283,6 +283,7 @@ const BLE={
       this.sdk.displayLineData(0,0,hex,this.DM.TextMode,this.dev);
     }catch(e){}
   },
+
   /* 텍스트 라인(20셀) = 상태 표시: 블록 위치 + 작성일 */
   pushStatus(){
     if(!this.connected)return;
@@ -327,8 +328,8 @@ const BLE={
     const b=curPage().blocks[state.focusIdx];
     this.pushDoc(b?b.text:"");this.pushStatus();}
 };
+
 window.BLE=BLE;window.DOTE_VERSION=DOTE_VERSION;   /* 콘솔 디버깅·테스트용 노출 */
-window.exportBrailleTxt=exportBrailleTxt;
 
 /* ─────────── [5] 앱 훅: 연결 버튼 + 상태 연동 ─────────── */
 (function(){
@@ -355,3 +356,28 @@ window.exportBrailleTxt=exportBrailleTxt;
   /* ── [6] 페이지 템플릿 모듈 로드 ── */
   const ts=document.createElement("script");ts.src="templates.js";document.body.appendChild(ts);
 })();
+
+/* ─────────── [7] 실시간 점자: 리딩엣지 스로틀 + 입력 커서 추적 ───────────
+   기존 250ms 디바운스는 연속 타이핑 동안 갱신이 멈춤(타자마다 타이머 리셋).
+   → 즉시 1회 렌더 + 이후 120ms 간격 보장(트레일링)으로 키 입력마다 점자가 올라온다.
+   입력에서 발생한 갱신은 점자 창(panOfs)이 텍스트 끝(커서 위치)을 따라가고,
+   포커스 이동·음성 낭독 등 읽기 목적 갱신은 기존대로 블록 처음부터 보여준다(tactile-ux).
+   DotPad 실기기는 renderBraille 훅 → pushDoc(행 차분 전송)이라 같은 리듬으로 갱신된다. */
+let _brFollow=false,_brLast=0,_brT2=null;
+const _origOnInput=onInput;
+onInput=function(e,i){_brFollow=true;try{_origOnInput(e,i);}finally{_brFollow=false;}};
+queueBraille=function(text){
+  const follow=_brFollow;
+  const run=()=>{
+    _brLast=Date.now();
+    if(follow){
+      const n=text?KB.brailleCells(text).length:0;
+      panOfs=n>20?Math.floor((n-1)/20)*20:0;          /* 커서가 있는 마지막 20셀 창 */
+    }
+    renderBraille(text||"");
+  };
+  if(_brT2){clearTimeout(_brT2);_brT2=null;}
+  const el=Date.now()-_brLast;
+  if(el>=120)run();
+  else _brT2=setTimeout(run,120-el);                  /* 연속 타이핑 중에도 120ms마다 갱신 */
+};
