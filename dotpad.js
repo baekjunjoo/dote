@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.14.0 (2026-07-16)";
+const DOTE_VERSION="0.14.1 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -622,6 +622,23 @@ queueBraille=function(text){
     setTimeout(()=>{try{sd.showModal();sd.querySelector("#srYes").focus();}catch(e){}},400);
   }
 
-  /* ── [11] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
+  /* ── [11] PWA 업데이트 알림: 새 SW 설치 감지 → 안내 + "업데이트" 음성/새로고침으로 적용 ── */
+  if("serviceWorker"in navigator&&location.protocol.startsWith("http")){
+    navigator.serviceWorker.getRegistration().then(reg=>{
+      if(!reg)return;
+      setInterval(()=>reg.update().catch(()=>{}),60*60*1000);   /* 1시간마다 갱신 확인 */
+      reg.addEventListener("updatefound",()=>{
+        const nw=reg.installing;if(!nw)return;
+        nw.addEventListener("statechange",()=>{
+          if(nw.state==="installed"&&navigator.serviceWorker.controller){
+            announce("도트 새 버전이 준비되었습니다. 새로고침하거나 업데이트라고 말하면 적용됩니다.");
+          }
+        });
+      });
+    }).catch(()=>{});
+    RULES.push({kw:[["업데이트",8],["새 버전",8]],run(){announce("업데이트를 적용합니다. 잠시만요.");setTimeout(()=>location.reload(),700);}});
+  }
+
+  /* ── [12] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
   const as=document.createElement("script");as.src="auth.js";document.body.appendChild(as);
 })();
