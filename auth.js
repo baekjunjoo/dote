@@ -31,7 +31,8 @@ dlg.innerHTML='<div class="dlg-pad" style="min-width:340px">'
  +'<div style="display:flex;gap:8px;margin-top:14px">'
  +'<button class="btn-cta" id="authLogin">로그인</button>'
  +'<button class="btn" id="authSignup" style="border:1px solid var(--border)">회원가입</button>'
- +'<button class="btn" id="authClose" style="border:1px solid var(--border)">닫기</button></div></div>'
+ +'<button class="btn" id="authClose" style="border:1px solid var(--border)">닫기</button></div>'
+ +'<p style="font-size:11px;color:var(--textDim);margin-top:12px">문서는 내 계정에만 저장되며 다른 사람은 볼 수 없습니다. 로그인하면 다른 기기에서도 같은 문서를 쓸 수 있어요.</p></div>'
  +'<div id="authIn" style="display:none">'
  +'<p id="authWho" style="font-size:13px;color:var(--textMuted);margin-bottom:12px"></p>'
  +'<div style="display:flex;gap:8px">'
@@ -63,7 +64,7 @@ async function login(signup){
       ?await SB.auth.signUp({email,password:pw})
       :await SB.auth.signInWithPassword({email,password:pw});
     if(r.error){announce((signup?"가입 실패: ":"로그인 실패: ")+r.error.message);return;}
-    if(signup&&!r.data.session){announce("확인 메일을 보냈습니다. 메일의 링크를 누른 뒤 다시 로그인하세요.");dlg.close();return;}
+    if(signup&&!r.data.session){announce("가입 확인 메일을 보냈습니다. 메일함에서 도트가 보낸 메일을 열어 링크를 누른 다음, 여기로 돌아와 로그인해 주세요.");dlg.close();return;}
     user=r.data.user;setSlot();dlg.close();
     announce(`${user.email} 계정으로 로그인했습니다. 문서를 동기화합니다.`);
     await pull();
