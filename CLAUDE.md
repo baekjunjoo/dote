@@ -68,6 +68,9 @@ setTimeout(()=>{const w=dom.window,d=w.document;
   console.log(w.DOTE_VERSION, d.querySelectorAll("#blocks .block").length, (w.PAGE_TEMPLATES||[]).length, !!w.SDTTS, !!w.Auth);
   process.exit(0);},2500);'
 ```
+DotPad 시뮬레이터(실기기 없이 BLE 계약 검증): `JSDOM_PATH=<jsdom경로> node test/dotpad-sim.js`
+— 연결 게이트, 점형 일치, 행 차분, keep-alive, 팬/F1~F4, 다중 기기 미러링 18항목.
+
 체크포인트: DOTE_VERSION 최신, 블록 렌더 ≥10, 템플릿 8, SDTTS·Auth 로드. jsdom은 file:// localStorage·showModal·scrollIntoView가 없으므로 방어 코드 필수(이미 적용됨).
 
 ## 문서
