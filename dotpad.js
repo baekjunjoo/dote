@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.10.0 (2026-07-14)";
+const DOTE_VERSION="0.10.1 (2026-07-14)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -398,19 +398,24 @@ queueBraille=function(text){
     u.addEventListener("click",()=>{if(window.Auth)Auth.open();else announce("로그인 모듈을 불러오는 중입니다. 잠시 후 다시 시도하세요.");});
   }
 
-  /* 설정: TTS 속도 (localStorage 유지, SDTTS 즉시 반영) */
+  /* 설정: TTS 속도 5단계 (localStorage에는 % 값 유지 — 기존 저장값은 가장 가까운 단계로 흡수) */
   const RATE_KEY="dote_tts_rate";
-  function getRate(){let v=105;try{v=parseInt(localStorage.getItem(RATE_KEY)||"105",10);}catch(e){}return isNaN(v)?105:Math.min(200,Math.max(60,v));}
-  function setRate(v){
-    v=Math.min(200,Math.max(60,v));
-    try{localStorage.setItem(RATE_KEY,String(v));}catch(e){}
-    if(window.SDTTS)SDTTS.configure({rate:v});
-    const el=document.getElementById("rateVal");if(el)el.textContent=v+"%";
-    const rr=document.getElementById("rateRange");if(rr&&Number(rr.value)!==v)rr.value=v;
-    return v;
+  const LEVELS=[80,95,105,130,160];                   /* 1 매우 느림 ~ 5 매우 빠름 */
+  const LNAMES=["매우 느림","느림","보통","빠름","매우 빠름"];
+  function lvlFromRate(r){let best=2,d=1e9;LEVELS.forEach((v,i)=>{const x=Math.abs(v-r);if(x<d){d=x;best=i;}});return best;}
+  function getLevel(){let r=105;try{r=parseInt(localStorage.getItem(RATE_KEY)||"105",10);}catch(e){}if(isNaN(r))r=105;return lvlFromRate(r);}
+  function lvlText(i){return `${i+1}단계 · ${LNAMES[i]}`;}
+  function setLevel(i){
+    i=Math.min(4,Math.max(0,i));
+    try{localStorage.setItem(RATE_KEY,String(LEVELS[i]));}catch(e){}
+    if(window.SDTTS)SDTTS.configure({rate:LEVELS[i]});
+    const el=document.getElementById("rateVal");if(el)el.textContent=lvlText(i);
+    const rr=document.getElementById("rateRange");
+    if(rr){if(Number(rr.value)!==i+1)rr.value=i+1;rr.setAttribute("aria-valuetext",`${i+1}단계, ${LNAMES[i]}`);}
+    return i;
   }
-  /* SDTTS 로드 완료 시 저장된 속도 적용 */
-  const _iv=setInterval(()=>{if(window.SDTTS){SDTTS.configure({rate:getRate()});clearInterval(_iv);}},300);
+  /* SDTTS 로드 완료 시 저장된 단계 적용 */
+  const _iv=setInterval(()=>{if(window.SDTTS){SDTTS.configure({rate:LEVELS[getLevel()]});clearInterval(_iv);}},300);
   setTimeout(()=>clearInterval(_iv),10000);
 
   const dlg=document.createElement("dialog");
@@ -418,18 +423,19 @@ queueBraille=function(text){
   dlg.innerHTML='<div class="dlg-pad" style="min-width:320px">'
     +'<h2>설정</h2>'
     +'<label for="rateRange" style="display:block;font-size:13px;margin-bottom:6px">음성 안내 속도 <strong id="rateVal"></strong></label>'
-    +'<input type="range" id="rateRange" min="60" max="200" step="5" style="width:100%;accent-color:var(--accent)" aria-label="음성 안내 속도, 60에서 200퍼센트, 좌우 화살표로 조절">'
+    +'<input type="range" id="rateRange" min="1" max="5" step="1" style="width:100%;accent-color:var(--accent)" aria-label="음성 안내 속도, 1단계 매우 느림부터 5단계 매우 빠름까지, 좌우 화살표로 조절">'
+    +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--textDim);margin-top:4px" aria-hidden="true"><span>매우 느림</span><span>느림</span><span>보통</span><span>빠름</span><span>매우 빠름</span></div>'
     +'<div style="display:flex;gap:8px;margin-top:14px">'
     +'<button class="btn" id="rateTest" style="border:1px solid var(--border)">들어보기</button>'
     +'<button class="btn-cta" id="setClose">닫기</button></div></div>';
   document.body.appendChild(dlg);
   const rr=dlg.querySelector("#rateRange");
-  rr.value=getRate();dlg.querySelector("#rateVal").textContent=getRate()+"%";
-  rr.addEventListener("input",()=>setRate(Number(rr.value)));
-  rr.addEventListener("change",()=>announce(`음성 속도 ${rr.value}퍼센트`));
-  dlg.querySelector("#rateTest").addEventListener("click",()=>announce(`현재 속도 ${getRate()}퍼센트로 안내합니다. 점으로 쓰는 노트, 도트.`));
+  setLevel(getLevel());
+  rr.addEventListener("input",()=>setLevel(Number(rr.value)-1));
+  rr.addEventListener("change",()=>{const i=Number(rr.value)-1;announce(`음성 속도 ${i+1}단계, ${LNAMES[i]}`);});
+  dlg.querySelector("#rateTest").addEventListener("click",()=>{const i=getLevel();announce(`${i+1}단계 ${LNAMES[i]} 속도로 안내합니다. 점으로 쓰는 노트, 도트.`);});
   dlg.querySelector("#setClose").addEventListener("click",()=>dlg.close());
-  function openSettings(){rr.value=getRate();dlg.showModal();rr.focus();announce(`설정 열림. 음성 속도 ${getRate()}퍼센트. 좌우 화살표로 조절, 이스케이프로 닫기.`);}
+  function openSettings(){const i=getLevel();rr.value=i+1;dlg.showModal();rr.focus();announce(`설정 열림. 음성 속도 ${i+1}단계 ${LNAMES[i]}. 좌우 화살표로 조절, 이스케이프로 닫기.`);}
   window.openSettings=openSettings;
 
   /* 사이드바 하단 설정 버튼 */
@@ -440,8 +446,8 @@ queueBraille=function(text){
 
   RULES.push(
     {kw:[["설정",6],["세팅",6]],run(){openSettings();}},
-    {kw:[["빠르게",6],["속도 올려",7]],run(){const v=setRate(getRate()+15);announce(`음성 속도 ${v}퍼센트`);}},
-    {kw:[["느리게",6],["속도 내려",7]],run(){const v=setRate(getRate()-15);announce(`음성 속도 ${v}퍼센트`);}}
+    {kw:[["빠르게",6],["속도 올려",7]],run(){const i=setLevel(getLevel()+1);announce(`음성 속도 ${i+1}단계, ${LNAMES[i]}`);}},
+    {kw:[["느리게",6],["속도 내려",7]],run(){const i=setLevel(getLevel()-1);announce(`음성 속도 ${i+1}단계, ${LNAMES[i]}`);}}
   );
 
   /* ── [9] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
