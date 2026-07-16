@@ -17,9 +17,9 @@
 :root{
   --bg:#FFFFFF; --bg2:#FFFFFF; --sidebarBg:#FFFFFF;
   --surface:#F6F6F6; --surfaceHov:#EFEFEF;
-  --text:#000000; --textMuted:#3A3A3A; --textDim:#909090; --placeholder:rgba(0,0,0,.25);
+  --text:#000000; --textMuted:#2E2E2E; --textDim:#6E6E6E; --placeholder:rgba(0,0,0,.55);
   --accent:#000000; --accentSoft:rgba(0,0,0,.06); --accentGlow:rgba(0,0,0,.15);
-  --border:rgba(0,0,0,.12); --borderStrong:rgba(0,0,0,.28);
+  --border:rgba(0,0,0,.14); --borderStrong:rgba(0,0,0,.45);
   --dotActive:#000000; --dotInact:rgba(0,0,0,.10);
   --sidebar-w:240px; --header-h:44px;
   --font-en:'Helvetica Neue',Helvetica,Arial,system-ui,sans-serif;
@@ -78,13 +78,13 @@ aside.sidebar.collapsed{width:0;border-right:none}
 .nav-item[aria-pressed="true"]{background:var(--accentSoft);color:var(--accent)}
 .nav-ico{width:15px;text-align:center;opacity:.7;flex-shrink:0;font-size:12px}
 .shortcut{
-  margin-left:auto;font-size:10px;color:var(--textDim);font-family:var(--font-mono);
+  margin-left:auto;font-size:11px;color:var(--textDim);font-family:var(--font-mono);
   background:rgba(0,0,0,.05);border:1px solid var(--border);padding:1px 5px;border-radius:0;letter-spacing:.06em;
 }
 .sidebar-section{padding:4px 8px;flex-shrink:0}
 .section-header{height:26px;padding:0 4px;display:flex;align-items:center;justify-content:space-between}
 .sec-label{
-  font-size:10px;font-weight:500;color:var(--textDim);text-transform:uppercase;
+  font-size:11px;font-weight:500;color:var(--textDim);text-transform:uppercase;
   letter-spacing:.12em;font-family:var(--font-mono);
 }
 /* 페이지 트리 */
@@ -97,13 +97,13 @@ aside.sidebar.collapsed{width:0;border-right:none}
 }
 .tree-row:hover{background:rgba(0,0,0,.05);color:var(--text)}
 [role="treeitem"][aria-selected="true"]>.tree-row{background:var(--text);color:#fff;font-weight:500}
-.chev{width:16px;height:16px;border-radius:0;font-size:8px;color:var(--textDim);display:grid;place-items:center;flex:none;padding:0}
+.chev{width:24px;height:24px;border-radius:0;font-size:10px;color:var(--textDim);display:grid;place-items:center;flex:none;padding:0}
 .chev:hover{background:rgba(0,0,0,.08)}
 .p-ico{width:17px;text-align:center;flex:none;font-size:13px;line-height:1}
 .tree-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row-acts{display:none;gap:2px}
 .tree-row:hover .row-acts,.tree-row:focus-within .row-acts{display:flex}
-.row-acts button{width:20px;height:20px;border-radius:0;font-size:11px;color:var(--textDim);display:grid;place-items:center;padding:0}
+.row-acts button{width:24px;height:24px;border-radius:0;font-size:12px;color:var(--textDim);display:grid;place-items:center;padding:0}
 .row-acts button:hover{background:rgba(0,0,0,.08);color:var(--text)}
 .newpage-row{
   width:100%;height:28px;padding:0 8px;display:flex;align-items:center;gap:8px;
@@ -125,7 +125,7 @@ aside.sidebar.collapsed{width:0;border-right:none}
 #crumbs button[aria-current]{color:var(--textMuted)}
 #crumbs .sep{font-size:11px;opacity:.5}
 .spacer{flex:1}
-#updated{font-size:10px;color:var(--textDim);font-family:var(--font-mono);letter-spacing:.03em;white-space:nowrap}
+#updated{font-size:11px;color:var(--textDim);font-family:var(--font-mono);letter-spacing:.03em;white-space:nowrap}
 .header-actions{display:flex;align-items:center;gap:4px}
 .btn{
   height:28px;padding:0 10px;display:inline-flex;align-items:center;border-radius:var(--r-sm);
@@ -169,9 +169,9 @@ hr.meta-divider{border:none;border-top:1px solid var(--border);margin:12px 0 20p
 /* ── 블록 ── */
 #blocks{display:flex;flex-direction:column;gap:2px}
 .block{display:flex;gap:4px;align-items:flex-start;border-radius:var(--r-sm);padding:1px 0;position:relative}
-.handles{display:flex;gap:1px;opacity:0;transition:opacity var(--tr);flex:none;padding-top:4px;width:44px;justify-content:flex-end}
+.handles{display:flex;gap:1px;opacity:0;transition:opacity var(--tr);flex:none;padding-top:4px;width:52px;justify-content:flex-end}
 .block:hover .handles,.block:focus-within .handles{opacity:1}
-.handle{width:20px;height:22px;border-radius:var(--r-sm);color:var(--textDim);font-size:13px;display:grid;place-items:center;padding:0}
+.handle{width:24px;height:24px;border-radius:var(--r-sm);color:var(--textDim);font-size:13px;display:grid;place-items:center;padding:0}
 .handle:hover{background:rgba(0,0,0,.06);color:var(--text)}
 .handle:focus-visible{opacity:1}
 .block-body{flex:1;display:flex;gap:6px;align-items:flex-start;min-width:0}
@@ -232,7 +232,7 @@ hr.meta-divider{border:none;border-top:1px solid var(--border);margin:12px 0 20p
   font-family:var(--font-mono);color:var(--accent);
 }
 #slashMenu .mi-desc{font-size:11px;color:var(--textDim)}
-#slashMenu .m-label{font-size:10px;font-weight:500;letter-spacing:.12em;color:var(--textDim);text-transform:uppercase;font-family:var(--font-mono);padding:6px 10px 4px}
+#slashMenu .m-label{font-size:11px;font-weight:500;letter-spacing:.12em;color:var(--textDim);text-transform:uppercase;font-family:var(--font-mono);padding:6px 10px 4px}
 
 /* ── 점자 라인 ── */
 #brailleBar{
@@ -244,10 +244,10 @@ hr.meta-divider{border:none;border-top:1px solid var(--border);margin:12px 0 20p
 .bcell i{width:5px;height:5px;border-radius:1.5px;background:var(--dotInact);transition:all var(--tr)}
 .bcell i.on{background:var(--dotActive)}
 #uniLine{font-size:14px;font-family:var(--font-mono);color:var(--textDim);min-width:110px}
-.pan{width:26px;height:26px;border-radius:var(--r-sm);font-size:10px;color:var(--textMuted);border:1px solid var(--border);background:var(--surface)}
+.pan{width:28px;height:28px;border-radius:var(--r-sm);font-size:10px;color:var(--textMuted);border:1px solid var(--border);background:var(--surface)}
 .pan:hover{background:var(--surfaceHov);color:var(--text)}
 #statusLine{
-  font-size:10.5px;letter-spacing:.03em;color:var(--textDim);padding:5px 20px;
+  font-size:11.5px;letter-spacing:.03em;color:var(--textDim);padding:5px 20px;
   border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   flex-shrink:0;background:var(--bg2);font-family:var(--font-mono);
 }
@@ -278,6 +278,32 @@ dialog td:first-child{font-family:var(--font-mono);font-size:11px;color:var(--ac
 #icoDlg .grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:10px}
 #icoDlg .grid button{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);font-size:18px;padding:6px}
 #icoDlg .grid button:hover{background:var(--surfaceHov);border-color:var(--borderStrong)}
+
+/* ── 저시력 모드 (html.lv): 확대·고대비·강한 포커스·컨트롤 상시 표시 ── */
+html.lv{font-size:19px;
+  --textMuted:#111; --textDim:#3D3D3D;
+  --placeholder:rgba(0,0,0,.62);
+  --border:rgba(0,0,0,.4); --borderStrong:rgba(0,0,0,.65);
+  --accentSoft:rgba(0,0,0,.12);
+}
+html.lv :focus-visible{outline:4px solid #0050B3;outline-offset:3px}
+html.lv .block textarea{font-size:17.5px;line-height:1.9}
+html.lv .t-h1 textarea{font-size:30px}
+html.lv .t-h2 textarea{font-size:23px}
+html.lv .t-h3 textarea{font-size:19px}
+html.lv #pageTitle{font-size:42px}
+html.lv .tree-row{height:38px;font-size:15.5px}
+html.lv .nav-item{height:40px;font-size:15.5px}
+html.lv .btn,html.lv .btn-cta{height:36px;font-size:14px}
+html.lv .icon-btn{width:36px;height:36px;font-size:16px}
+html.lv .handles{opacity:1}
+html.lv .row-acts{display:flex}
+html.lv #statusLine{font-size:14.5px;font-weight:600;color:#000;padding:8px 20px}
+html.lv .sec-label,html.lv .shortcut{font-size:12.5px}
+html.lv #crumbs button{font-size:15px}
+html.lv .bcell i{width:7px;height:7px}
+html.lv #slashMenu [role="option"]{font-size:15px;padding:9px 12px}
+html.lv dialog{font-size:1.05em}
 
 @media (max-width:768px){
   aside.sidebar{position:fixed;left:0;top:0;bottom:0;z-index:100;box-shadow:none;border-right:1px solid var(--borderStrong)}

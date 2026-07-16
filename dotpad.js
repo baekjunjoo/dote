@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.12.0 (2026-07-16)";
+const DOTE_VERSION="0.13.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -418,6 +418,16 @@ queueBraille=function(text){
   }
   setBB(bbOn());
 
+  /* 저시력 모드: 확대·고대비·강한 포커스·컨트롤 상시 표시 (html.lv 클래스) */
+  const LV_KEY="dote_lowvision";
+  function lvOn(){try{return localStorage.getItem(LV_KEY)==="1";}catch(e){return false;}}
+  function setLV(on){
+    try{localStorage.setItem(LV_KEY,on?"1":"0");}catch(e){}
+    document.documentElement.classList.toggle("lv",on);
+    const c=document.getElementById("lvChk");if(c)c.checked=on;
+  }
+  setLV(lvOn());
+
   /* 사이드바 로고 → 사용자 슬롯: 로그인하면 이메일 표시 (auth.js가 갱신) */
   const wi=document.querySelector(".workspace-icon");
   if(wi){
@@ -457,7 +467,8 @@ queueBraille=function(text){
     +'<label for="rateRange" style="display:block;font-size:13px;margin-bottom:6px">음성 안내 속도 <strong id="rateVal"></strong></label>'
     +'<input type="range" id="rateRange" min="1" max="6" step="1" style="width:100%;accent-color:var(--accent)" aria-label="음성 안내 속도, 1단계 매우 느림부터 6단계 최고 속도까지, 좌우 화살표로 조절">'
     +'<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--textDim);margin-top:4px" aria-hidden="true"><span>매우 느림</span><span>느림</span><span>보통</span><span>빠름</span><span>매우 빠름</span><span>최고</span></div>'
-    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:16px;cursor:pointer"><input type="checkbox" id="bbChk" style="accent-color:var(--accent);width:15px;height:15px">점자 미리보기 표시 <span style="font-size:11px;color:var(--textDim)">(화면 하단 · 교사·부모 검수용)</span></label>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:16px;cursor:pointer"><input type="checkbox" id="lvChk" style="accent-color:var(--accent);width:18px;height:18px">저시력 모드 <span style="font-size:11px;color:var(--textDim)">(큰 글자 · 강한 대비 · 굵은 포커스)</span></label>'
+    +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer"><input type="checkbox" id="bbChk" style="accent-color:var(--accent);width:18px;height:18px">점자 미리보기 표시 <span style="font-size:11px;color:var(--textDim)">(화면 하단 · 교사·부모 검수용)</span></label>'
     +'<div style="display:flex;gap:8px;margin-top:14px">'
     +'<button class="btn" id="rateTest" style="border:1px solid var(--border)">들어보기</button>'
     +'<button class="btn-cta" id="setClose">닫기</button></div></div>';
@@ -467,6 +478,9 @@ queueBraille=function(text){
   const bbc=dlg.querySelector("#bbChk");
   bbc.checked=bbOn();
   bbc.addEventListener("change",()=>{setBB(bbc.checked);announce(bbc.checked?"점자 미리보기를 화면에 표시합니다.":"점자 미리보기를 숨겼습니다.");});
+  const lvc=dlg.querySelector("#lvChk");
+  lvc.checked=lvOn();
+  lvc.addEventListener("change",()=>{setLV(lvc.checked);announce(lvc.checked?"저시력 모드를 켰습니다. 글자가 커지고 대비가 강해집니다.":"저시력 모드를 껐습니다.");});
   rr.addEventListener("input",()=>setLevel(Number(rr.value)-1));
   rr.addEventListener("change",()=>{const i=Number(rr.value)-1;announce(`음성 속도 ${i+1}단계, ${LNAMES[i]}`);});
   dlg.querySelector("#rateTest").addEventListener("click",()=>{const i=getLevel();announce(`${i+1}단계 ${LNAMES[i]} 속도로 안내합니다. 점으로 쓰는 노트, 도트.`);});
@@ -484,7 +498,8 @@ queueBraille=function(text){
     {kw:[["설정",6],["세팅",6]],run(){openSettings();}},
     {kw:[["빠르게",6],["속도 올려",7]],run(){const i=setLevel(getLevel()+1);announce(`음성 속도 ${i+1}단계, ${LNAMES[i]}`);}},
     {kw:[["느리게",6],["속도 내려",7]],run(){const i=setLevel(getLevel()-1);announce(`음성 속도 ${i+1}단계, ${LNAMES[i]}`);}},
-    {kw:[["점자 미리보기",9],["미리보기 켜",8],["미리보기 꺼",8]],run(){const on=!bbOn();setBB(on);announce(on?"점자 미리보기를 화면에 표시합니다.":"점자 미리보기를 숨겼습니다.");}}
+    {kw:[["점자 미리보기",9],["미리보기 켜",8],["미리보기 꺼",8]],run(){const on=!bbOn();setBB(on);announce(on?"점자 미리보기를 화면에 표시합니다.":"점자 미리보기를 숨겼습니다.");}},
+    {kw:[["저시력",9],["큰 글자",8],["글자 크게",8],["고대비",8]],run(){const on=!lvOn();setLV(on);announce(on?"저시력 모드를 켰습니다. 글자가 커지고 대비가 강해집니다.":"저시력 모드를 껐습니다.");}}
   );
 
   /* ── [9] 내보내기 선택: BRF(한소네 등 점자정보단말기) · eBraille · 유니코드 점자 ── */
