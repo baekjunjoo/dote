@@ -32,7 +32,7 @@
 ## 점자 (korean-braille / ebraille)
 
 - `KB.brailleCells(str)`→점 배열, `KB.dotsToByte`, `KB.strToTextCells`, `KB.setGrade("g1"|"g2")`, `EB.buildEbrl`(eBraille 1.0 OCF, mimetype STORED 선행), `EB.textToBraille`.
-- 검증 벡터(깨지면 안 됨): 팔다=[[1,4,5],[1,2,6],[3,4],[2,4]] · 것이다=⠸⠎⠕⠊ · working=⠐⠺⠬ · 그리고=[[1],[1,3,6]]
+- 검증 벡터(깨지면 안 됨, 기본 grade=g2): 팔다=[[1,4,5],[2],[2,4]] · 것이다=⠸⠎⠕⠊ · working=⠐⠺⠬ · 그리고=[[1],[1,3,6]]
 
 ## 클라우드 (Supabase)
 
