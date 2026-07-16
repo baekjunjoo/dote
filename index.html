@@ -96,7 +96,7 @@ aside.sidebar.collapsed{width:0;border-right:none}
   transition:background var(--tr),color var(--tr);white-space:nowrap;overflow:hidden;
 }
 .tree-row:hover{background:rgba(0,0,0,.05);color:var(--text)}
-[role="treeitem"][aria-selected="true"]>.tree-row{background:var(--text);color:#fff;font-weight:500}
+[role="treeitem"][aria-selected="true"]>.tree-row{background:var(--text);color:var(--bg);font-weight:500}
 .chev{width:24px;height:24px;border-radius:0;font-size:10px;color:var(--textDim);display:grid;place-items:center;flex:none;padding:0}
 .chev:hover{background:rgba(0,0,0,.08)}
 .p-ico{width:17px;text-align:center;flex:none;font-size:13px;line-height:1}
@@ -136,7 +136,7 @@ aside.sidebar.collapsed{width:0;border-right:none}
 .btn[aria-pressed="true"]{background:var(--accentSoft);color:var(--accent);border-color:var(--borderStrong)}
 .btn-cta{
   height:28px;padding:0 12px;display:inline-flex;align-items:center;border-radius:var(--r-md);
-  background:var(--accent);color:#fff;font-size:12px;font-weight:600;
+  background:var(--accent);color:var(--bg);font-size:12px;font-weight:600;
   transition:opacity var(--tr);
 }
 .btn-cta:hover{opacity:.75}
@@ -225,7 +225,7 @@ hr.meta-divider{border:none;border-top:1px solid var(--border);margin:12px 0 20p
 }
 #slashMenu.open{display:block}
 #slashMenu [role="option"]{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--r-md);font-size:13px;color:var(--textMuted);cursor:pointer}
-#slashMenu [role="option"][aria-selected="true"]{background:var(--text);color:#fff}
+#slashMenu [role="option"][aria-selected="true"]{background:var(--text);color:var(--bg)}
 #slashMenu .mi-ico{
   width:28px;height:28px;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--r-md);display:grid;place-items:center;font-size:11px;flex:none;
@@ -273,7 +273,7 @@ dialog td:first-child{font-family:var(--font-mono);font-size:11px;color:var(--ac
 #findInput:focus{border-color:var(--text);outline:none}
 #findList{margin-top:8px;max-height:300px;overflow-y:auto}
 #findList li{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:var(--r-md);font-size:13.5px;color:var(--textMuted);cursor:pointer}
-#findList li[aria-selected="true"]{background:var(--text);color:#fff}
+#findList li[aria-selected="true"]{background:var(--text);color:var(--bg)}
 #findList .f-sub{font-size:11px;color:var(--textDim)}
 #icoDlg .grid{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;margin-top:10px}
 #icoDlg .grid button{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);font-size:18px;padding:6px}
@@ -304,6 +304,28 @@ html.lv #crumbs button{font-size:15px}
 html.lv .bcell i{width:7px;height:7px}
 html.lv #slashMenu [role="option"]{font-size:15px;padding:9px 12px}
 html.lv dialog{font-size:1.05em}
+
+/* ── 다크 고대비 (html.hc): 검정 배경·흰 글자·옐로 포인트 — 저시력·눈부심 민감 사용자용 ── */
+html.hc{
+  --bg:#000000; --bg2:#000000; --sidebarBg:#000000;
+  --surface:#121212; --surfaceHov:#1F1F1F;
+  --text:#FFFFFF; --textMuted:#F0F0F0; --textDim:#C9C9C9;
+  --placeholder:rgba(255,255,255,.65);
+  --accent:#FFFFFF; --accentSoft:rgba(255,255,255,.16); --accentGlow:rgba(255,255,255,.3);
+  --border:rgba(255,255,255,.35); --borderStrong:rgba(255,255,255,.65);
+  --dotActive:#FFE01A; --dotInact:rgba(255,255,255,.22);
+}
+html.hc ::selection{background:#FFE01A;color:#000}
+html.hc :focus-visible{outline-color:#FFE01A}
+html.hc dialog,html.hc #slashMenu{background:#000;border-color:var(--borderStrong)}
+html.hc dialog::backdrop{background:rgba(0,0,0,.75)}
+html.hc .bcell{background:#121212}
+html.hc .shortcut{background:rgba(255,255,255,.12)}
+html.hc .pagelink{text-decoration-color:rgba(255,255,255,.55)}
+html.hc .nav-item:hover,html.hc .icon-btn:hover,html.hc .tree-row:hover,html.hc .btn:hover,html.hc .handle:hover,html.hc .newpage-row:hover,html.hc #icoBtn:hover,html.hc .pagelink:hover{background:rgba(255,255,255,.14)}
+html.hc .chev:hover,html.hc .row-acts button:hover{background:rgba(255,255,255,.18)}
+html.hc .t-toggle>.block-body:hover{background:rgba(255,255,255,.08)}
+html.hc.lv :focus-visible{outline:4px solid #FFE01A;outline-offset:3px}
 
 @media (max-width:768px){
   aside.sidebar{position:fixed;left:0;top:0;bottom:0;z-index:100;box-shadow:none;border-right:1px solid var(--borderStrong)}
