@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.14.1 (2026-07-16)";
+const DOTE_VERSION="0.15.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -641,4 +641,238 @@ queueBraille=function(text){
 
   /* ── [12] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
   const as=document.createElement("script");as.src="auth.js";document.body.appendChild(as);
+})();
+
+/* ─────────── [13] 생산성: 개요 탐색 · 할 일 집계 · DotPad 연속 읽기 ───────────
+   비시각 생산성의 핵심 = "훑기"와 "다시 찾기".
+   - 개요: 시맨틱 헤딩을 목차로 낭독·점프 (음성 "개요"/"N번 섹션", 키보드 Ctrl+Shift+O)
+   - 할 일: 전 페이지의 미완료 todo 집계 (음성 "남은 할 일"/"N번 완료", 키보드 Ctrl+Shift+T)
+   - 연속 읽기: 문서 전체를 DotPad 200셀 화면 단위로 정독, 위치 북마크 (팬 넘김·F2 종료) */
+(function(){
+  let lastList=null;                                  /* 직전 낭독 목록 — "N번" 후속 명령의 대상 */
+
+  /* ── 1) 개요 ── */
+  function outlineItems(){
+    return curPage().blocks.map((b,i)=>({b,i}))
+      .filter(x=>["h1","h2","h3"].includes(x.b.type)&&x.b.text.trim());
+  }
+  function readOutline(){
+    const items=outlineItems();
+    if(!items.length){announce("이 페이지에는 제목 블록이 없습니다.");return;}
+    lastList={type:"outline",items};
+    announce("개요. "+items.map((x,n)=>`${n+1}. ${x.b.text}`).join(". ")
+      +". 이동하려면 몇 번 섹션이라고 말하세요.");
+  }
+  function jumpSection(n){
+    const items=(lastList&&lastList.type==="outline")?lastList.items:outlineItems();
+    const t=items[n-1];
+    if(!t){announce(`${n}번 섹션이 없습니다. 섹션은 ${items.length}개입니다.`);return;}
+    focusBlock(t.i);
+    announce(`${n}번 섹션. ${t.b.text}`);
+  }
+
+  /* ── 2) 할 일 집계 + 오늘 페이지 ── */
+  function todoItems(){
+    const out=[];
+    state.pages.forEach(p=>p.blocks.forEach((b,i)=>{
+      if(b.type==="todo"&&!b.checked&&b.text&&b.text.trim())out.push({p,b,i});
+    }));
+    return out;
+  }
+  function readTodos(){
+    const items=todoItems();
+    if(!items.length){announce("남은 할 일이 없습니다. 전부 완료했습니다.");return;}
+    lastList={type:"todo",items};
+    const head=items.slice(0,10);
+    announce(`남은 할 일 ${items.length}개. `
+      +head.map((x,n)=>`${n+1}. ${x.b.text}, ${pTitle(x.p)}`).join(". ")
+      +(items.length>10?". 이하 생략":"")+". 완료하려면 몇 번 완료.");
+  }
+  function completeTodo(n){
+    if(!(lastList&&lastList.type==="todo")){announce("먼저 남은 할 일이라고 물어보세요.");return;}
+    const t=lastList.items[n-1];
+    if(!t){announce(`${n}번 할 일이 없습니다.`);return;}
+    t.b.checked=true;
+    if(t.p.id===state.cur)renderBlocks();
+    save();
+    announce(`완료. ${t.b.text}. 남은 할 일 ${todoItems().length}개.`);
+  }
+  function dailyPage(){
+    const d=new Date(),title=`${d.getMonth()+1}월 ${d.getDate()}일`;
+    let p=state.pages.find(x=>x.title===title);
+    if(!p){
+      p=newPage(null,title);p.icon="📅";
+      p.blocks=[nb("h2","오늘 할 일"),nb("todo",""),nb("h2","메모"),nb("p","")];
+    }
+    openPage(p.id);
+  }
+
+  /* ── 공용 목록 다이얼로그 (개요·할 일 겸용, 키보드 단독 조작) ── */
+  const ld=document.createElement("dialog");
+  ld.id="listDlg";ld.setAttribute("aria-label","목록");
+  ld.innerHTML='<div class="dlg-pad" style="min-width:380px;max-width:480px">'
+    +'<h2 id="listTitle"></h2>'
+    +'<ul id="listUl" role="listbox" tabindex="0" style="max-height:320px;overflow-y:auto;outline:none"></ul>'
+    +'<p id="listHint" style="font-size:11px;color:var(--textDim);margin-top:10px"></p></div>';
+  document.body.appendChild(ld);
+  let ldItems=[],ldSel=0,ldMode="";
+  function renderLd(){
+    const ul=ld.querySelector("#listUl");ul.innerHTML="";
+    ldItems.forEach((x,i)=>{
+      const li=document.createElement("li");
+      li.setAttribute("role","option");li.setAttribute("aria-selected",String(i===ldSel));
+      li.style.cssText="padding:8px 10px;font-size:14px;cursor:pointer"
+        +(i===ldSel?";background:var(--text);color:var(--bg)":"");
+      li.textContent=(i+1)+". "+x.label;
+      li.addEventListener("click",()=>{ldSel=i;renderLd();ldEnter();});
+      ul.appendChild(li);
+    });
+  }
+  function ldEnter(){
+    const x=ldItems[ldSel];if(!x)return;
+    ld.close();
+    if(ldMode==="outline"){focusBlock(x.i);announce(`${ldSel+1}번 섹션. ${x.label}`);}
+    else{openPage(x.p.id);focusBlock(x.i);announce(`이동. ${x.b.text}`);}
+  }
+  function ldComplete(){
+    const x=ldItems[ldSel];if(!x||ldMode!=="todo")return;
+    x.b.checked=true;
+    if(x.p.id===state.cur)renderBlocks();
+    save();
+    ldItems.splice(ldSel,1);
+    if(!ldItems.length){ld.close();announce("전부 완료했습니다.");return;}
+    ldSel=Math.min(ldSel,ldItems.length-1);renderLd();
+    announce(`완료. 남은 ${ldItems.length}개. 현재: ${ldItems[ldSel].label}`);
+  }
+  ld.addEventListener("keydown",e=>{
+    if(e.key==="ArrowDown"){e.preventDefault();if(ldSel<ldItems.length-1){ldSel++;renderLd();announce(`${ldSel+1}. ${ldItems[ldSel].label}`);}}
+    else if(e.key==="ArrowUp"){e.preventDefault();if(ldSel>0){ldSel--;renderLd();announce(`${ldSel+1}. ${ldItems[ldSel].label}`);}}
+    else if(e.key==="Enter"){e.preventDefault();ldEnter();}
+    else if(e.key===" "&&ldMode==="todo"){e.preventDefault();ldComplete();}
+  });
+  function openLd(mode){
+    ldMode=mode;ldSel=0;
+    if(mode==="outline"){
+      const items=outlineItems();
+      if(!items.length){announce("이 페이지에는 제목 블록이 없습니다.");return;}
+      ldItems=items.map(x=>({label:x.b.text,i:x.i}));
+      ld.querySelector("#listTitle").textContent="개요";
+      ld.querySelector("#listHint").textContent="위아래 이동 · 엔터 이동 · 이스케이프 닫기";
+    }else{
+      const items=todoItems();
+      if(!items.length){announce("남은 할 일이 없습니다.");return;}
+      ldItems=items.map(x=>({label:`${x.b.text} — ${pTitle(x.p)}`,p:x.p,b:x.b,i:x.i}));
+      ld.querySelector("#listTitle").textContent="남은 할 일";
+      ld.querySelector("#listHint").textContent="위아래 이동 · 엔터 이동 · 스페이스 완료 · 이스케이프 닫기";
+    }
+    renderLd();
+    try{ld.showModal();}catch(e){ld.setAttribute("open","");}   /* jsdom 등 showModal 부재 방어 */
+    ld.querySelector("#listUl").focus();
+    announce((mode==="outline"?"개요":"남은 할 일")+` ${ldItems.length}개. 1. ${ldItems[0].label}`);
+  }
+  window.openOutline=()=>openLd("outline");
+  window.openTodos=()=>openLd("todo");
+  document.addEventListener("keydown",e=>{
+    if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="o"){e.preventDefault();openLd("outline");}
+    else if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="t"){e.preventDefault();openLd("todo");}
+  });
+
+  /* ── 3) DotPad 연속 읽기 (정독 모드) ── */
+  const Reader={
+    on:false,cells:[],pos:0,
+    _load(){try{return JSON.parse(localStorage.getItem("dote_readpos")||"{}");}catch(e){return{};}},
+    _save(){try{const o=this._load();o[state.cur]=this.pos;localStorage.setItem("dote_readpos",JSON.stringify(o));}catch(e){}},
+    build(){
+      const out=[];
+      curPage().blocks.forEach(b=>{
+        if(!b.text||!b.text.trim())return;
+        if(out.length){out.push([]);out.push([]);}     /* 블록 사이 빈 셀 2개 */
+        KB.brailleCells(b.text).forEach(c=>out.push(c));
+      });
+      return out;
+    },
+    total(){return Math.ceil(this.cells.length/200);},
+    start(){
+      if(!BLE.connected){announce("연속 읽기는 닷패드 연결 후 사용할 수 있습니다. 닷패드 연결이라고 말해보세요.");return;}
+      this.cells=this.build();
+      if(!this.cells.length){announce("읽을 내용이 없습니다.");return;}
+      const saved=this._load()[state.cur]||0;
+      this.pos=(saved>0&&saved<this.cells.length)?saved:0;
+      this.on=true;this.push();
+      announce(`연속 읽기 시작. 전체 ${this.total()} 화면`
+        +(this.pos?`, 지난번 위치 ${Math.floor(this.pos/200)+1}번째 화면부터 이어 읽습니다`:"")
+        +". 팬 키로 화면 넘김, 에프원 위치, 에프투 종료.");
+    },
+    stop(){
+      if(!this.on){announce("연속 읽기 중이 아닙니다.");return;}
+      this.on=false;this._save();
+      BLE.pushAll();                                   /* 일반 블록 모드 화면 복원 */
+      announce("연속 읽기 끝. 읽던 위치를 저장했습니다.");
+    },
+    push(){
+      if(!BLE.connected)return;
+      BLE.buf.fill(0);
+      const POS={1:[0,0],2:[0,1],3:[0,2],4:[1,0],5:[1,1],6:[1,2],7:[0,3],8:[1,3]};
+      this.cells.slice(this.pos,this.pos+200).forEach((dots,i)=>{
+        const cx=(i%20)*3,cy=Math.floor(i/20)*4;
+        dots.forEach(dt=>{const q=POS[dt];if(q)BLE.set(cx+q[0],cy+q[1]);});
+      });
+      BLE.requestPush();
+      try{BLE.pushText(`R ${Math.floor(this.pos/200)+1}/${this.total()}`);}catch(e){}
+    },
+    pan(dir){
+      const next=this.pos+dir*200;
+      if(next<0){announce("문서의 처음입니다.");return;}
+      if(next>=this.cells.length){announce("문서의 끝입니다. 에프투로 종료하세요.");return;}
+      this.pos=next;this.push();this._save();
+      announce(`${Math.floor(this.pos/200)+1}번째 화면`);
+    }
+  };
+  window.Reader=Reader;
+
+  /* 연속 읽기 중 키·전송 라우팅 분리 */
+  const _onKey=BLE.onKey.bind(BLE);
+  BLE.onKey=function(key){
+    if(Reader.on){
+      if(key==="PanningRight")Reader.pan(1);
+      else if(key==="PanningLeft")Reader.pan(-1);
+      else if(key==="KeyFunction1")announce(`연속 읽기. ${Math.floor(Reader.pos/200)+1} / ${Reader.total()} 화면.`);
+      else if(key==="KeyFunction2")Reader.stop();
+      else announce("연속 읽기 중입니다. 팬 키로 넘기고 에프투로 종료.");
+      return;
+    }
+    _onKey(key);
+  };
+  const _pushDoc=BLE.pushDoc.bind(BLE);
+  BLE.pushDoc=function(text){if(Reader.on)return;_pushDoc(text);};
+  const _pushStatus=BLE.pushStatus.bind(BLE);
+  BLE.pushStatus=function(){if(Reader.on)return;_pushStatus();};
+
+  /* ── 음성 명령: 숫자 후속 명령은 매처 앞단에서 정규식 처리 ── */
+  const _mc=matchCmd;
+  matchCmd=function(text){
+    const t=String(text).replace(/\s/g,"");
+    let m=t.match(/^(\d+)번(째)?섹션/);
+    if(m){jumpSection(parseInt(m[1],10));return true;}
+    m=t.match(/^(\d+)번(째)?(할일)?완료/);
+    if(m){completeTodo(parseInt(m[1],10));return true;}
+    return _mc(text);
+  };
+  RULES.push(
+    {kw:[["개요",8],["목차",8],["섹션 읽어",9]],run(){readOutline();}},
+    {kw:[["남은 할 일",10],["할 일 뭐",10],["할 일 목록",10],["할일 목록",10],["할 일 읽어",10]],run(){readTodos();}},
+    {kw:[["오늘 페이지",9],["오늘 노트",9],["데일리",8]],run(){dailyPage();}},
+    {kw:[["연속 읽기",9],["정독",8],["이어 읽기",9]],run(){Reader.start();}},
+    {kw:[["읽기 끝",9],["정독 끝",9],["연속 읽기 끝",10]],run(){Reader.stop();}}
+  );
+
+  /* 도움말 표에 항목 추가 */
+  const ht=document.querySelector("#helpDlg table");
+  if(ht){
+    const r1=document.createElement("tr");
+    r1.innerHTML="<td>Ctrl+Shift+O / Ctrl+Shift+T</td><td>개요 이동 / 남은 할 일 (스페이스로 완료)</td>";
+    const r2=document.createElement("tr");
+    r2.innerHTML='<td>음성 (생산성)</td><td>"개요" · "2번 섹션" · "남은 할 일" · "3번 완료" · "오늘 페이지" · "연속 읽기"</td>';
+    ht.appendChild(r1);ht.appendChild(r2);
+  }
 })();
