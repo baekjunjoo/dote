@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.17.0 (2026-07-16)";
+const DOTE_VERSION="0.17.1 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -668,7 +668,18 @@ queueBraille=function(text){
     else announce("지금은 설치 안내를 띄울 수 없습니다. 이미 설치되었거나, 아이폰은 사파리 공유 메뉴에서 홈 화면에 추가를 사용하세요.");
   }});
 
-  /* ── [13] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
+  /* ── [13] 모바일 사이드바: 좁은 화면에선 접힌 채 시작 + 페이지 이동 시 자동 접힘 ──
+     모바일에서 fixed 오버레이 사이드바가 본문을 덮은 채 시작하는 문제 방지 */
+  function isNarrow(){try{return window.matchMedia("(max-width:768px)").matches;}catch(e){return false;}}
+  function collapseSidebar(){
+    const sb=document.getElementById("sidebar"),ex=document.getElementById("expandBtn");
+    if(sb&&!sb.classList.contains("collapsed")){sb.classList.add("collapsed");if(ex)ex.style.display="";}
+  }
+  if(isNarrow())collapseSidebar();
+  const _open=openPage;
+  openPage=function(id){_open(id);if(isNarrow())collapseSidebar();};
+
+  /* ── [14] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
   const as=document.createElement("script");as.src="auth.js";document.body.appendChild(as);
 })();
 

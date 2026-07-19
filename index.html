@@ -331,10 +331,22 @@ html.hc .t-toggle>.block-body:hover{background:rgba(255,255,255,.08)}
 html.hc.lv :focus-visible{outline:4px solid #FFE01A;outline-offset:3px}
 
 @media (max-width:768px){
-  aside.sidebar{position:fixed;left:0;top:0;bottom:0;z-index:100;box-shadow:none;border-right:1px solid var(--borderStrong)}
-  aside.sidebar.collapsed{width:0}
-  #editor{padding:0 24px 80px}
+  aside.sidebar{position:fixed;left:0;top:0;bottom:0;z-index:100;width:82vw;max-width:300px;box-shadow:none;border-right:1px solid var(--borderStrong)}
+  aside.sidebar.collapsed{width:0;border-right:none}
+  #editor{padding:0 20px 80px}
   #pageTitle{font-size:28px}
+  /* 상단바 압축: 좁은 폭에서 버튼 오버플로 방지 */
+  #topbar{padding:0 8px;gap:4px}
+  .btn{padding:0 7px;font-size:11px}
+  .btn-cta{padding:0 9px;font-size:11px}
+  #updated{display:none}
+  /* 블록 핸들 축소 */
+  .handles{width:30px}
+  .handles .handle:first-child{display:none}          /* ＋는 슬래시/음성으로 대체, 그립만 유지 */
+  /* 다이얼로그: 화면 폭에 맞춤 */
+  dialog{width:92vw;max-width:92vw}
+  .dlg-pad{padding:18px 16px;min-width:0!important}
+  .dlg-pad>div[style]{min-width:0!important}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
