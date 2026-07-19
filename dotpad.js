@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.15.0 (2026-07-16)";
+const DOTE_VERSION="0.16.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -658,7 +658,7 @@ queueBraille=function(text){
   }
   function readOutline(){
     const items=outlineItems();
-    if(!items.length){announce("이 페이지에는 제목 블록이 없습니다.");return;}
+    if(!items.length){announce("이 페이지에는 제목 블록이 없습니다. 샵 기호와 스페이스로 제목을 만들면 개요에 나옵니다.");return;}
     lastList={type:"outline",items};
     announce("개요. "+items.map((x,n)=>`${n+1}. ${x.b.text}`).join(". ")
       +". 이동하려면 몇 번 섹션이라고 말하세요.");
@@ -754,7 +754,7 @@ queueBraille=function(text){
     ldMode=mode;ldSel=0;
     if(mode==="outline"){
       const items=outlineItems();
-      if(!items.length){announce("이 페이지에는 제목 블록이 없습니다.");return;}
+      if(!items.length){announce("이 페이지에는 제목 블록이 없습니다. 샵 기호와 스페이스로 제목을 만들면 개요에 나옵니다.");return;}
       ldItems=items.map(x=>({label:x.b.text,i:x.i}));
       ld.querySelector("#listTitle").textContent="개요";
       ld.querySelector("#listHint").textContent="위아래 이동 · 엔터 이동 · 이스케이프 닫기";
@@ -772,9 +772,21 @@ queueBraille=function(text){
   }
   window.openOutline=()=>openLd("outline");
   window.openTodos=()=>openLd("todo");
+  /* 모바일(음성 미지원 iOS 등)·마우스 사용자용 진입점 */
+  const nav=document.querySelector(".sidebar-nav");
+  if(nav){
+    const mk=(txt,ico,fn)=>{
+      const b=document.createElement("button");b.className="nav-item";
+      b.innerHTML=`<span class="nav-ico" aria-hidden="true">${ico}</span><span>${txt}</span>`;
+      b.addEventListener("click",fn);nav.appendChild(b);
+    };
+    mk("개요","≡",()=>openLd("outline"));
+    mk("남은 할 일","☑",()=>openLd("todo"));
+  }
+  /* Ctrl+Shift+O/T는 크롬 예약 단축키(북마크 관리자/탭 복원)라 페이지에 도달하지 않음 → Ctrl+Alt 조합 사용 */
   document.addEventListener("keydown",e=>{
-    if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="o"){e.preventDefault();openLd("outline");}
-    else if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==="t"){e.preventDefault();openLd("todo");}
+    if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==="o"){e.preventDefault();openLd("outline");}
+    else if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==="t"){e.preventDefault();openLd("todo");}
   });
 
   /* ── 3) DotPad 연속 읽기 (정독 모드) ── */
@@ -854,7 +866,7 @@ queueBraille=function(text){
     const t=String(text).replace(/\s/g,"");
     let m=t.match(/^(\d+)번(째)?섹션/);
     if(m){jumpSection(parseInt(m[1],10));return true;}
-    m=t.match(/^(\d+)번(째)?(할일)?완료/);
+    m=t.match(/^(\d+)번(째)?(할일)?(완료|끝났어|끝|했어)/);
     if(m){completeTodo(parseInt(m[1],10));return true;}
     return _mc(text);
   };
@@ -870,7 +882,7 @@ queueBraille=function(text){
   const ht=document.querySelector("#helpDlg table");
   if(ht){
     const r1=document.createElement("tr");
-    r1.innerHTML="<td>Ctrl+Shift+O / Ctrl+Shift+T</td><td>개요 이동 / 남은 할 일 (스페이스로 완료)</td>";
+    r1.innerHTML="<td>Ctrl+Alt+O / Ctrl+Alt+T</td><td>개요 이동 / 남은 할 일 (스페이스로 완료)</td>";
     const r2=document.createElement("tr");
     r2.innerHTML='<td>음성 (생산성)</td><td>"개요" · "2번 섹션" · "남은 할 일" · "3번 완료" · "오늘 페이지" · "연속 읽기"</td>';
     ht.appendChild(r1);ht.appendChild(r2);

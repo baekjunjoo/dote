@@ -76,31 +76,57 @@ async function logout(){
   announce("로그아웃했습니다. 문서는 이 기기에 그대로 남아 있습니다.");
 }
 
-/* ── 동기화 (LWW) ── */
+/* ── 동기화: 페이지 단위 병합 ──
+   문서 전체 LWW는 다기기 부분 수정을 유실시킴(1주 페르소나 테스트 🔴).
+   → 페이지 id별로 updated가 큰 쪽을 채택하고, 삭제는 묘비(tombstone)로 전파해
+     다른 기기에서 지운 페이지가 부활하지 않게 한다. 같은 페이지를 양쪽에서 고친
+     경우만 페이지 단위 최신 우선(블록 단위 병합은 범위 외). */
+function loadTombs(){try{return JSON.parse(localStorage.getItem("dote_tombs")||"{}");}catch(e){return{};}}
+function saveTombs(t){try{localStorage.setItem("dote_tombs",JSON.stringify(t));}catch(e){}}
+function mergeDocs(localPages,localTombs,remote){
+  const rPages=(remote&&remote.pages)||[];
+  const rTombs=(remote&&remote.tombs)||{};
+  const tombs={};
+  for(const id in localTombs)tombs[id]=localTombs[id];
+  for(const id in rTombs)if(!tombs[id]||rTombs[id]>tombs[id])tombs[id]=rTombs[id];
+  const byId={};
+  localPages.forEach(p=>{byId[p.id]=p;});
+  let pulled=0;
+  rPages.forEach(rp=>{
+    const lp=byId[rp.id];
+    if(!lp||(rp.updated||0)>(lp.updated||0)){if(!lp||JSON.stringify(lp)!==JSON.stringify(rp))pulled++;byId[rp.id]=rp;}
+  });
+  const pages=Object.values(byId).filter(p=>!(tombs[p.id]&&tombs[p.id]>=(p.updated||0)));
+  const cut=Date.now()-30*24*3600*1000;                /* 30일 지난 묘비 정리 */
+  for(const id in tombs)if(tombs[id]<cut)delete tombs[id];
+  return {pages,tombs,pulled};
+}
 async function pull(){
   if(!SB||!user)return;
   try{
     const {data,error}=await SB.from("docs").select("data,updated_at").eq("user_id",user.id).maybeSingle();
     if(error){announce("동기화 확인에 실패했습니다: "+error.message);return;}
-    const remoteT=data?new Date(data.updated_at).getTime():0;
-    if(data&&data.data&&data.data.pages&&data.data.pages.length&&remoteT>latestLocal()){
-      pulling=true;
-      state.pages=data.data.pages;
-      state.cur=state.pages.find(p=>p.id===data.data.cur)?data.data.cur:state.pages[0].id;
-      state.focusIdx=0;
-      renderAll();save();
-      pulling=false;
-      announce(`클라우드 문서 ${state.pages.length}페이지를 불러왔습니다.`);
-    }else{
-      await pushNow();
-      announce("이 기기의 문서를 클라우드에 저장했습니다.");
-    }
+    const remote=data&&data.data?data.data:null;
+    const r=mergeDocs(state.pages,loadTombs(),remote);
+    pulling=true;
+    state.pages=r.pages;
+    if(!state.pages.length)newPage(null);
+    if(!state.pages.find(p=>p.id===state.cur))
+      state.cur=(remote&&remote.cur&&state.pages.find(p=>p.id===remote.cur))?remote.cur:state.pages[0].id;
+    state.focusIdx=0;
+    saveTombs(r.tombs);
+    renderAll();save();
+    pulling=false;
+    await pushNow();                                   /* 병합 결과를 클라우드에 반영 */
+    announce(r.pulled
+      ?`동기화 완료. 다른 기기에서 수정한 페이지 ${r.pulled}개를 반영했습니다.`
+      :"동기화 완료. 모든 기기가 같은 상태입니다.");
   }catch(e){pulling=false;announce("동기화 중 오류가 발생했습니다.");}
 }
 async function pushNow(){
   if(!SB||!user)return;
   try{
-    await SB.from("docs").upsert({user_id:user.id,data:{pages:state.pages,cur:state.cur},updated_at:new Date().toISOString()});
+    await SB.from("docs").upsert({user_id:user.id,data:{pages:state.pages,cur:state.cur,tombs:loadTombs()},updated_at:new Date().toISOString()});
   }catch(e){}
 }
 function schedulePush(){
@@ -111,6 +137,17 @@ function schedulePush(){
 /* save() 훅: 로컬 저장 때마다 클라우드 예약 저장(2초 디바운스) */
 const _save=save;
 save=function(){_save();schedulePush();};
+
+/* 삭제 전파: 삭제 시각을 묘비로 기록 → 다른 기기에서 부활 방지 */
+const _del=delPage;
+delPage=function(id){
+  const before=state.pages.map(p=>p.id);
+  _del(id);
+  const now=new Set(state.pages.map(p=>p.id));
+  const t=loadTombs();let ch=false;
+  before.forEach(pid=>{if(!now.has(pid)){t[pid]=Date.now();ch=true;}});
+  if(ch){saveTombs(t);schedulePush();}
+};
 
 /* 음성 명령 */
 RULES.push(
@@ -127,7 +164,7 @@ $a("#authLogout").addEventListener("click",logout);
 $a("#authSync").addEventListener("click",async()=>{await pushNow();announce("클라우드에 저장했습니다.");});
 $a("#authPw").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();login(false);}});
 
-window.Auth={open,logout,pushNow,get user(){return user;}};
+window.Auth={open,logout,pushNow,mergeDocs,get user(){return user;}};   /* mergeDocs는 테스트용 노출 */
 
 /* supabase-js 로드 → 세션 복원(재방문 시 자동 로그인 상태) */
 const sc=document.createElement("script");
