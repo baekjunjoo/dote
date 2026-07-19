@@ -131,7 +131,33 @@ async function pushNow(){
 }
 function schedulePush(){
   if(!user||pulling)return;
-  clearTimeout(pushT);pushT=setTimeout(pushNow,2000);
+  clearTimeout(pushT);
+  pushT=setTimeout(()=>{
+    if(navigator.onLine===false){trySyncRegister();return;}   /* 오프라인: 복귀 시 처리 */
+    pushNow();
+  },2000);
+}
+
+/* ── 오프라인 복귀 자동 동기화 (1주 테스트: 지하철 시나리오 마무리) ──
+   오프라인 편집은 로컬에 쌓이고, 복귀 즉시 pull(페이지 병합)로 양방향 동기화.
+   백그라운드 탭이면 SW Background Sync가 대신 깨운다. */
+function trySyncRegister(){
+  try{
+    if("serviceWorker"in navigator&&"SyncManager"in window)
+      navigator.serviceWorker.ready.then(r=>r.sync.register("dote-sync")).catch(()=>{});
+  }catch(e){}
+}
+window.addEventListener("offline",()=>{
+  announce("오프라인입니다. 문서는 이 기기에 저장되며, 연결되면 자동으로 동기화합니다.");
+});
+window.addEventListener("online",()=>{
+  if(user){announce("온라인에 다시 연결되었습니다. 문서를 동기화합니다.");pull();}
+  else announce("온라인에 다시 연결되었습니다.");
+});
+if("serviceWorker"in navigator&&navigator.serviceWorker.addEventListener){
+  navigator.serviceWorker.addEventListener("message",e=>{
+    if(e.data&&e.data.type==="dote-sync"&&user)pull();
+  });
 }
 
 /* save() 훅: 로컬 저장 때마다 클라우드 예약 저장(2초 디바운스) */

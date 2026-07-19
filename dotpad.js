@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.16.0 (2026-07-16)";
+const DOTE_VERSION="0.17.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -639,7 +639,36 @@ queueBraille=function(text){
     RULES.push({kw:[["업데이트",8],["새 버전",8]],run(){announce("업데이트를 적용합니다. 잠시만요.");setTimeout(()=>location.reload(),700);}});
   }
 
-  /* ── [12] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
+  /* ── [12] 앱 설치 유도: beforeinstallprompt → 사이드바 버튼 + 음성 "설치" ── */
+  let deferredPrompt=null;
+  window.addEventListener("beforeinstallprompt",e=>{
+    e.preventDefault();deferredPrompt=e;
+    const foot2=document.querySelector(".sidebar-footer");
+    if(foot2&&!document.getElementById("installBtn")){
+      const b=document.createElement("button");b.className="nav-item";b.id="installBtn";
+      b.innerHTML='<span class="nav-ico" aria-hidden="true">⇩</span><span>앱으로 설치</span>';
+      b.addEventListener("click",async()=>{
+        if(!deferredPrompt){announce("지금은 설치 안내를 띄울 수 없습니다.");return;}
+        deferredPrompt.prompt();
+        try{const r=await deferredPrompt.userChoice;
+          announce(r&&r.outcome==="accepted"?"설치를 시작합니다.":"설치를 취소했습니다.");}catch(err){}
+        deferredPrompt=null;
+      });
+      foot2.appendChild(b);
+      announce("도트를 앱으로 설치할 수 있습니다. 사이드바 맨 아래 설치 버튼, 또는 설치라고 말하세요.");
+    }
+  });
+  window.addEventListener("appinstalled",()=>{
+    announce("도트가 앱으로 설치되었습니다. 홈 화면에서 바로 열 수 있습니다.");
+    const b=document.getElementById("installBtn");if(b)b.remove();
+  });
+  RULES.push({kw:[["설치",8],["앱으로 설치",10]],run(){
+    const b=document.getElementById("installBtn");
+    if(b)b.click();
+    else announce("지금은 설치 안내를 띄울 수 없습니다. 이미 설치되었거나, 아이폰은 사파리 공유 메뉴에서 홈 화면에 추가를 사용하세요.");
+  }});
+
+  /* ── [13] 클라우드(Supabase) 로그인·동기화 모듈 로드 ── */
   const as=document.createElement("script");as.src="auth.js";document.body.appendChild(as);
 })();
 

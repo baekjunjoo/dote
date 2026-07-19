@@ -34,5 +34,21 @@
       "purpose": "any"
     }
   ],
-  "id": "./"
+  "id": "./",
+  "screenshots": [
+    {
+      "src": "screenshot-wide.png",
+      "sizes": "1280x660",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Dote 편집 화면 — 블록 기반 노트와 점자·음성 안내"
+    },
+    {
+      "src": "screenshot-narrow.png",
+      "sizes": "750x1334",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "모바일 편집 화면"
+    }
+  ]
 }
