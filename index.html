@@ -656,7 +656,8 @@ function renderBlocks(){
     const plus=document.createElement("button");plus.className="handle";plus.textContent="＋";
     plus.setAttribute("aria-label",`블록 ${i+1} 아래에 새 블록`);
     plus.addEventListener("click",()=>{insertBlock(i+1,nb("p"));focusBlock(i+1);openSlash(i+1);});
-    const grip=document.createElement("button");grip.className="handle";grip.textContent="⋮⋮";grip.style.letterSpacing="-3px";
+    const grip=document.createElement("button");grip.className="handle";
+    grip.innerHTML='<svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><g fill="currentColor"><circle cx="3" cy="3" r="1.7"/><circle cx="8" cy="3" r="1.7"/><circle cx="3" cy="8" r="1.7"/><circle cx="8" cy="8" r="1.7"/><circle cx="3" cy="13" r="1.7"/><circle cx="8" cy="13" r="1.7"/></g></svg>';
     grip.setAttribute("aria-label",`블록 ${i+1} 메뉴: 유형 ${TYPES[b.type]}. 엔터로 메뉴 열기`);
     grip.addEventListener("click",e=>{openSlash(i,true,e.currentTarget);});
     handles.append(plus,grip);div.appendChild(handles);
