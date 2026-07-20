@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.17.1 (2026-07-16)";
+const DOTE_VERSION="0.18.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -574,11 +574,13 @@ queueBraille=function(text){
     +'<button class="btn" id="xBrf" style="border:1px solid var(--border);justify-content:flex-start;height:auto;padding:10px 12px;text-align:left">BRF 점자 파일<br><span style="font-size:11px;color:var(--textDim)">한소네 등 점자정보단말기 · 점자 프린터용 표준</span></button>'
     +'<button class="btn" id="xEbrl" style="border:1px solid var(--border);justify-content:flex-start;height:auto;padding:10px 12px;text-align:left">eBraille (.ebrl)<br><span style="font-size:11px;color:var(--textDim)">차세대 전자점자 표준 · 지원 기기·뷰어용</span></button>'
     +'<button class="btn" id="xTxt" style="border:1px solid var(--border);justify-content:flex-start;height:auto;padding:10px 12px;text-align:left">유니코드 점자 텍스트 (.txt)<br><span style="font-size:11px;color:var(--textDim)">화면에서 점자 모양 그대로 보기·공유용</span></button>'
+    +'<button class="btn" id="xBak" style="border:1px solid var(--border);justify-content:flex-start;height:auto;padding:10px 12px;text-align:left">전체 백업 (.zip)<br><span style="font-size:11px;color:var(--textDim)">모든 페이지를 JSON(복원용)+BRF(열람용)로 한 번에</span></button>'
     +'</div><button class="btn-cta" id="xClose" style="margin-top:14px">닫기</button></div>';
   document.body.appendChild(xd);
   xd.querySelector("#xBrf").addEventListener("click",()=>{xd.close();exportBrf();});
   xd.querySelector("#xEbrl").addEventListener("click",()=>{xd.close();exportEbrl();});
   xd.querySelector("#xTxt").addEventListener("click",()=>{xd.close();exportBrailleTxt();});
+  xd.querySelector("#xBak").addEventListener("click",()=>{xd.close();window.exportBackup&&window.exportBackup();});
   xd.querySelector("#xClose").addEventListener("click",()=>xd.close());
   /* 기존 .ebrl 단일 버튼 → 형식 선택으로 교체 */
   const eb=document.getElementById("exportBtn");
@@ -714,9 +716,12 @@ queueBraille=function(text){
   /* ── 2) 할 일 집계 + 오늘 페이지 ── */
   function todoItems(){
     const out=[];
-    state.pages.forEach(p=>p.blocks.forEach((b,i)=>{
-      if(b.type==="todo"&&!b.checked&&b.text&&b.text.trim())out.push({p,b,i});
-    }));
+    state.pages.forEach(p=>{
+      if(p.archived)return;                            /* 보관된 페이지의 할 일은 집계 제외 */
+      p.blocks.forEach((b,i)=>{
+        if(b.type==="todo"&&!b.checked&&b.text&&b.text.trim())out.push({p,b,i});
+      });
+    });
     return out;
   }
   function readTodos(){
@@ -926,5 +931,230 @@ queueBraille=function(text){
     const r2=document.createElement("tr");
     r2.innerHTML='<td>음성 (생산성)</td><td>"개요" · "2번 섹션" · "남은 할 일" · "3번 완료" · "오늘 페이지" · "연속 읽기"</td>';
     ht.appendChild(r1);ht.appendChild(r2);
+  }
+})();
+
+/* ─────────── [15] 3개월 피드백: 실행취소 · 전체 백업 · 보관함 · 글자 수 ───────────
+   (3개월 페르소나 테스트 우선순위 1·2·3·8 — 준서·미란·하늘의 유실/규정/정리 요구) */
+(function(){
+  /* ── 1) 실행취소: 블록 연산 스냅샷 스택 (최근 20스텝) ──
+     텍스트 타이핑은 브라우저 기본 Ctrl+Z가 담당, 여기는 구조 변화만:
+     블록 삭제·이동·유형변경·분할·병합·페이지 삭제 */
+  const UNDO=[],UMAX=20;
+  function snapPage(){
+    const p=curPage();
+    UNDO.push({type:"page",id:p.id,blocks:JSON.parse(JSON.stringify(p.blocks)),focus:state.focusIdx});
+    if(UNDO.length>UMAX)UNDO.shift();
+  }
+  function doteUndo(){
+    const u=UNDO.pop();
+    if(!u){announce("되돌릴 작업이 없습니다.");return;}
+    if(u.type==="page"){
+      const p=state.pages.find(x=>x.id===u.id);
+      if(!p){announce("되돌릴 페이지가 없습니다.");return;}
+      p.blocks=u.blocks;p.updated=Date.now();
+      if(p.id===state.cur){renderBlocks();focusBlock(Math.min(u.focus,p.blocks.length-1));}
+    }else{
+      state.pages=u.pages;
+      state.cur=u.pages.find(x=>x.id===u.cur)?u.cur:u.pages[0].id;
+      /* 복원된 페이지의 삭제 묘비 해제(동기화가 다시 지우지 않게) */
+      try{
+        const tb=JSON.parse(localStorage.getItem("dote_tombs")||"{}");let ch=false;
+        state.pages.forEach(p=>{if(tb[p.id]){delete tb[p.id];p.updated=Date.now();ch=true;}});
+        if(ch)localStorage.setItem("dote_tombs",JSON.stringify(tb));
+      }catch(e){}
+      renderAll();
+    }
+    save();announce("실행취소했습니다.");
+  }
+  window.doteUndo=doteUndo;
+  const _rm=removeBlock;removeBlock=function(i){snapPage();_rm(i);};
+  const _mv=moveBlock;moveBlock=function(i,d){snapPage();_mv(i,d);};
+  const _st2=setType;setType=function(i,ty){snapPage();_st2(i,ty);};
+  const _bk=blockKey;blockKey=function(e,i){
+    if((e.key==="Enter"&&!e.shiftKey)||(e.key==="Backspace"&&e.target.selectionStart===0&&e.target.selectionEnd===0))snapPage();
+    _bk(e,i);
+  };
+  const _dp3=delPage;delPage=function(id){
+    const before=JSON.stringify(state.pages),cur=state.cur;
+    _dp3(id);
+    if(JSON.stringify(state.pages)!==before){
+      UNDO.push({type:"all",pages:JSON.parse(before),cur});
+      if(UNDO.length>UMAX)UNDO.shift();
+    }
+  };
+  document.addEventListener("keydown",e=>{
+    if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==="z"){e.preventDefault();doteUndo();}
+  });
+
+  /* ── 2) 전체 백업: JSON(복원용) + 페이지별 BRF(열람용) → 단일 zip ── */
+  function crc32(buf){
+    let t=crc32._t;
+    if(!t){t=crc32._t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}}
+    let r=0xFFFFFFFF;
+    for(let i=0;i<buf.length;i++)r=t[(r^buf[i])&0xFF]^(r>>>8);
+    return (r^0xFFFFFFFF)>>>0;
+  }
+  function makeZip(files){                             /* STORED(무압축) — 규격 최소 구현, UTF-8 파일명 */
+    const parts=[],cds=[];let off=0;
+    files.forEach(f=>{
+      const name=f.nameBytes,d=f.data,crc=crc32(d);
+      const lh=new DataView(new ArrayBuffer(30));
+      lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);
+      lh.setUint32(14,crc,true);lh.setUint32(18,d.length,true);lh.setUint32(22,d.length,true);
+      lh.setUint16(26,name.length,true);
+      parts.push(new Uint8Array(lh.buffer),name,d);
+      const ch=new DataView(new ArrayBuffer(46));
+      ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);
+      ch.setUint32(16,crc,true);ch.setUint32(20,d.length,true);ch.setUint32(24,d.length,true);
+      ch.setUint16(28,name.length,true);ch.setUint32(42,off,true);
+      cds.push(new Uint8Array(ch.buffer),name);
+      off+=30+name.length+d.length;
+    });
+    let cdLen=0;cds.forEach(x=>cdLen+=x.length);
+    const eo=new DataView(new ArrayBuffer(22));
+    eo.setUint32(0,0x06054b50,true);eo.setUint16(8,files.length,true);eo.setUint16(10,files.length,true);
+    eo.setUint32(12,cdLen,true);eo.setUint32(16,off,true);
+    const all=[...parts,...cds,new Uint8Array(eo.buffer)];
+    let tot=0;all.forEach(x=>tot+=x.length);
+    const out=new Uint8Array(tot);let p=0;
+    all.forEach(x=>{out.set(x,p);p+=x.length;});
+    return out;
+  }
+  const BRF_T=" A1B'K2L@CIF/MSP\"E3H9O6R^DJG>NTQ,*5<-U8V.%[$+X!&;:4\\0Z7(_?W]#Y)=";
+  function pageBrf(p){
+    const cells=[];
+    p.blocks.forEach(b=>{
+      if(!b.text||!b.text.trim())return;
+      if(cells.length){cells.push([]);cells.push([]);}
+      KB.brailleCells(b.text).forEach(c=>cells.push(c));
+    });
+    if(!cells.length)return null;
+    const lines=[];let line="";
+    cells.forEach(d=>{
+      let v=0;d.forEach(x=>{if(x>=1&&x<=6)v|=1<<(x-1);});
+      line+=BRF_T[v];
+      if(line.length>=40){lines.push(line);line="";}
+    });
+    if(line)lines.push(line);
+    return lines.join("\r\n");
+  }
+  function exportBackup(){
+    const enc=new TextEncoder();
+    const files=[{nameBytes:enc.encode("dote-backup.json"),
+      data:enc.encode(JSON.stringify({exportedAt:new Date().toISOString(),app:"Dote "+DOTE_VERSION,pages:state.pages,cur:state.cur},null,1))}];
+    const used=new Set();
+    state.pages.forEach(p=>{
+      const brf=pageBrf(p);if(!brf)return;
+      let nm=(pTitle(p)||"페이지").replace(/[\\/:*?"<>|]/g,"_").slice(0,40);
+      let base=nm,k=2;while(used.has(nm))nm=base+"-"+(k++);
+      used.add(nm);
+      files.push({nameBytes:enc.encode("brf/"+nm+".brf"),data:enc.encode(brf)});
+    });
+    const d=new Date(),z=n=>String(n).padStart(2,"0");
+    const zip=makeZip(files);
+    try{
+      const blob=new Blob([zip],{type:"application/zip"});
+      const a=document.createElement("a");a.href=URL.createObjectURL(blob);
+      a.download=`dote-백업-${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}.zip`;
+      a.click();URL.revokeObjectURL(a.href);
+    }catch(e){}                                        /* jsdom 등 다운로드 API 부재 방어 */
+    announce(`전체 백업 완료. 페이지 ${state.pages.length}개를 JSON과 BRF 파일로 내보냈습니다.`);
+    return zip;                                        /* 테스트에서 zip 바이트 검증용 */
+  }
+  window.exportBackup=exportBackup;
+
+  /* ── 3) 보관함: 끝난 문서를 현역 트리에서 치우되 검색·데이터는 유지 ── */
+  function archivePage(id){
+    const p=state.pages.find(x=>x.id===id);if(!p)return;
+    p.archived=true;p.updated=Date.now();
+    if(state.cur===id){
+      const n=state.pages.find(x=>!x.archived);
+      if(n)openPage(n.id);else openPage(newPage(null).id);
+    }
+    renderTree();save();
+    announce(`${pTitle(p)} 페이지를 보관함으로 옮겼습니다. 검색에는 계속 나옵니다.`);
+  }
+  function unarchivePage(id){
+    const p=state.pages.find(x=>x.id===id);if(!p)return;
+    p.archived=false;p.updated=Date.now();
+    renderTree();save();
+    announce(`${pTitle(p)} 페이지를 보관함에서 꺼냈습니다.`);
+  }
+  window.archivePage=archivePage;window.unarchivePage=unarchivePage;
+  function renderArchive(){
+    /* 현역 트리에서 보관 페이지 숨김 + 보관 버튼 주입 */
+    state.pages.forEach(p=>{
+      if(!p.archived)return;
+      const li=document.querySelector(`[role="treeitem"][data-id="${p.id}"]`);
+      if(li)li.style.display="none";
+    });
+    document.querySelectorAll('[role="treeitem"]').forEach(li=>{
+      const id=li.dataset.id,p=state.pages.find(x=>x.id===id);
+      if(!p||p.archived)return;
+      const acts=li.querySelector(".row-acts");
+      if(acts&&!acts.querySelector(".arcBtn")){
+        const b=document.createElement("button");b.className="arcBtn";b.textContent="⬇";
+        b.setAttribute("aria-label",`${pTitle(p)} 보관하기`);
+        b.addEventListener("click",e=>{e.stopPropagation();archivePage(id);});
+        acts.insertBefore(b,acts.firstChild);
+      }
+    });
+    /* 보관함 섹션 */
+    let sec=document.getElementById("archSec");
+    const arch=state.pages.filter(p=>p.archived);
+    if(!sec){
+      sec=document.createElement("div");sec.className="sidebar-section";sec.id="archSec";
+      sec.innerHTML='<div class="section-header"><span class="sec-label">보관함</span></div><ul id="archList"></ul>';
+      const sb=document.getElementById("sidebar");
+      sb.insertBefore(sec,sb.querySelector(".sidebar-footer"));
+    }
+    sec.style.display=arch.length?"":"none";
+    const ul=sec.querySelector("#archList");ul.innerHTML="";
+    arch.forEach(p=>{
+      const li=document.createElement("li");
+      const row=document.createElement("div");row.className="tree-row";row.tabIndex=0;
+      row.setAttribute("role","button");
+      row.setAttribute("aria-label",`보관된 페이지 ${pTitle(p)}. 엔터로 열기`);
+      const tt=document.createElement("span");tt.className="tree-title";tt.textContent=pTitle(p);
+      const out=document.createElement("button");out.className="chev";out.textContent="⬆";
+      out.setAttribute("aria-label",`${pTitle(p)} 보관함에서 꺼내기`);
+      out.addEventListener("click",e=>{e.stopPropagation();unarchivePage(p.id);});
+      row.append(tt,out);
+      row.addEventListener("click",()=>openPage(p.id));
+      row.addEventListener("keydown",e=>{if(e.key==="Enter")openPage(p.id);});
+      li.appendChild(row);ul.appendChild(li);
+    });
+  }
+  const _rt3=renderTree;
+  renderTree=function(){_rt3();renderArchive();};
+  renderArchive();
+
+  /* ── 8) 글자 수 (자소서·원고 사용자) ── */
+  function charCount(){
+    const p=curPage(),b=p.blocks[state.focusIdx];
+    const cur=(b&&b.text)?b.text.length:0;
+    const curNs=(b&&b.text)?b.text.replace(/\s/g,"").length:0;
+    const tot=p.blocks.reduce((s,x)=>s+(x.text?x.text.length:0),0);
+    announce(`현재 블록 ${cur}자, 공백 빼면 ${curNs}자. 페이지 전체 ${tot}자.`);
+  }
+  window.charCount=charCount;
+
+  RULES.push(
+    {kw:[["실행취소",10],["실행 취소",10],["되돌려",9],["방금 취소",9]],run(){doteUndo();}},
+    {kw:[["전체 백업",10],["백업",8],["모두 내보내",9]],run(){exportBackup();}},
+    {kw:[["보관해",10],["보관함으로",10],["페이지 보관",10]],run(){archivePage(state.cur);}},
+    {kw:[["글자 수",9],["글자수",9],["몇 자",8],["몇 글자",9]],run(){charCount();}}
+  );
+
+  /* 도움말 갱신 */
+  const ht=document.querySelector("#helpDlg table");
+  if(ht){
+    const r=document.createElement("tr");
+    r.innerHTML='<td>Ctrl+Alt+Z</td><td>실행취소 (블록 삭제·이동·병합 복구) — 음성 "실행취소"</td>';
+    ht.appendChild(r);
+    const r2=document.createElement("tr");
+    r2.innerHTML='<td>음성 (관리)</td><td>"전체 백업" · "보관해" · "글자 수"</td>';
+    ht.appendChild(r2);
   }
 })();
