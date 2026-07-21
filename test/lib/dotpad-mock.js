@@ -47,7 +47,8 @@ function createMockSdk(){
   };
 }
 
-/* 10행 hex(행당 30바이트) → 셀별 점 배열. 검증 인코딩: bit = y%4 + (x%2)*4, 셀 피치 3×4px */
+/* 10행 hex(행당 30바이트) → 셀별 점 배열. 검증 인코딩: bit = y%4 + (x%2)*4
+   멀티라인 점자 레이아웃: 30셀×10줄 = 300셀, 셀 피치 2×4px (DotPad 320 전면 활용) */
 function rowsToCells(rowHexes){
   const buf=[];
   for(let gy=0;gy<10;gy++){
@@ -62,11 +63,11 @@ function rowsToCells(rowHexes){
   }
   const POS={"0,0":1,"0,1":2,"0,2":3,"1,0":4,"1,1":5,"1,2":6,"0,3":7,"1,3":8};
   const cells=[];
-  for(let line=0;line<10;line++)for(let c=0;c<20;c++){
+  for(let line=0;line<10;line++)for(let c=0;c<30;c++){
     const dots=[];
     for(const k in POS){
       const [dx,dy]=k.split(",").map(Number);
-      if(buf[(line*4+dy)*60+(c*3+dx)])dots.push(POS[k]);
+      if(buf[(line*4+dy)*60+(c*2+dx)])dots.push(POS[k]);
     }
     cells.push(dots.sort((a,b)=>a-b));
   }

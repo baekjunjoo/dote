@@ -172,7 +172,11 @@ hr.meta-divider{border:none;border-top:1px solid var(--border);margin:12px 0 20p
 /* ── 블록 ── */
 #blocks{display:flex;flex-direction:column;gap:2px}
 .block{display:flex;gap:4px;align-items:flex-start;border-radius:var(--r-sm);padding:1px 0;position:relative}
-.handles{display:flex;gap:1px;opacity:0;transition:opacity var(--tr);flex:none;padding-top:4px;width:52px;justify-content:flex-end}
+.handles{display:flex;gap:1px;opacity:0;transition:opacity var(--tr);flex:none;padding-top:6px;width:52px;justify-content:flex-end}
+.t-h1 .handles{padding-top:20px}
+.t-h2 .handles{padding-top:16px}
+.t-h3 .handles{padding-top:11px}
+.t-quote .handles,.t-callout .handles{padding-top:14px}
 .block:hover .handles,.block:focus-within .handles{opacity:1}
 .handle{width:24px;height:24px;border-radius:var(--r-sm);color:var(--textDim);font-size:13px;display:grid;place-items:center;padding:0}
 .handle:hover{background:rgba(0,0,0,.06);color:var(--text)}
@@ -653,7 +657,8 @@ function renderBlocks(){
     /* 시맨틱 헤딩: 스크린리더 H키 문서 탐색 지원 */
     if(b.type==="h1"||b.type==="h2"||b.type==="h3"){div.setAttribute("role","heading");div.setAttribute("aria-level",b.type[1]);}
     const handles=document.createElement("div");handles.className="handles";
-    const plus=document.createElement("button");plus.className="handle";plus.textContent="＋";
+    const plus=document.createElement("button");plus.className="handle";
+    plus.innerHTML='<svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
     plus.setAttribute("aria-label",`블록 ${i+1} 아래에 새 블록`);
     plus.addEventListener("click",()=>{insertBlock(i+1,nb("p"));focusBlock(i+1);openSlash(i+1);});
     const grip=document.createElement("button");grip.className="handle";

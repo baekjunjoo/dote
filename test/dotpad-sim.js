@@ -89,6 +89,27 @@ try{
   await wait(50);
   t.ok("전체 해제",w.BLE.connected===false&&w.BLE.devs.length===0);
 
+  /* [6] 300셀 화면 패닝: 긴 블록에서 팬=화면 스크롤, 경계에서 블록 이동 폴백 */
+  console.log("\n[6] 300셀 화면 패닝");
+  sim.fireMessage("Connected",{id:"P1"});             /* 재연결 */
+  await wait(100);
+  const longTa=d.querySelectorAll("#blocks .block textarea")[1];
+  longTa.focus();
+  longTa.value="삼백 셀을 넘기는 아주 긴 점자 확인 문장입니다 ".repeat(20);
+  longTa.dispatchEvent(new w.Event("input",{bubbles:true}));
+  await wait(400);
+  t.ok("타이핑 넘침 시 마지막 화면 표시",w.BLE.viewOfs>0,"viewOfs="+w.BLE.viewOfs);
+  const totalScr=w.BLE.viewTotal();
+  sim.fireKey("PanningLeft");await wait(50);
+  t.ok("팬 왼쪽 → 이전 화면",/점자 \d+\/\d+ 화면/.test(status()),status());
+  const ofs1=w.BLE.viewOfs;
+  sim.fireKey("PanningRight");await wait(50);
+  t.ok("팬 오른쪽 → 다음 화면",w.BLE.viewOfs===ofs1+300,w.BLE.viewOfs+"/"+ofs1);
+  /* 마지막 화면에서 팬 오른쪽 → 블록 이동 폴백 */
+  while(w.BLE.viewOfs+300<w.BLE.viewCells.length){sim.fireKey("PanningRight");await wait(20);}
+  sim.fireKey("PanningRight");await wait(60);
+  t.ok("경계에서 블록 이동 폴백",/\d+\/\d+ |문서의 끝/.test(status()),status());
+
   process.exit(t.summary());
 }catch(e){console.error("하네스 오류:",e.stack.split("\n").slice(0,4).join("\n"));process.exit(2);}
 },2500);

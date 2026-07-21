@@ -27,8 +27,8 @@
 - `onMessage`에서 `"Connected"` 수신 후에만 전송 시작. `connectBleDevice`는 DotDevice 또는 null 반환.
 - 전송은 행단위 `displayLineData(lineId, startCell, hexData, DisplayMode, device)`만 사용. 그래픽 행 lineId 1–10, 텍스트 라인 lineId 0. DisplayMode는 문자열 "GraphicMode"/"TextMode".
 - 셀 인코딩: bit = y%4 + (x%2)*4, 60×40 → 10행×30바이트. keep-alive 1초 1행 재전송, 행 차분 전송, setTimeout(0) 마이크로배치.
-- 멀티라인 점자: 그래픽 60×40 = 20셀×10줄(셀 피치 3×4px). 텍스트 라인 20셀 = 상태(블록위치 M-D)만.
-- DotPad 키: Pan=블록 이동, F1=위치 읽기, F2=블록 메뉴, F3=트리 그래픽, F4=전체 읽기.
+- 멀티라인 점자: 그래픽 60×40 = 30셀×10줄 = 300셀(셀 피치 2×4px, P320 전면 활용). 타이핑이 300셀 초과 시 마지막 화면 자동 표시. 텍스트 라인 20셀 = 상태(블록위치 M-D)만.
+- DotPad 키: Pan=300셀 화면 스크롤(경계에서 블록 이동 폴백), F1=위치 읽기, F2=블록 메뉴, F3=트리 그래픽, F4=전체 읽기.
 
 ## 점자 (korean-braille / ebraille)
 

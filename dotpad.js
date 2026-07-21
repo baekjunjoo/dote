@@ -16,7 +16,7 @@
    renderTree: [16](보관함)→[5](DotPad 상태)→원본 · matchCmd: [15](숫자 명령)→[2](미스로그)→원본
    openPage: [15](Reader 종료)→[8-13](모바일 접힘)→원본 · blockKey/removeBlock/moveBlock/setType: [16](Undo)→원본 */
 "use strict";
-const DOTE_VERSION="0.20.0 (2026-07-16)";
+const DOTE_VERSION="0.21.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -280,8 +280,8 @@ const BLE={
   },
   onKey(key){
     if(!this.connected)return;
-    if(key==="PanningRight")navBlock(1);
-    else if(key==="PanningLeft")navBlock(-1);
+    if(key==="PanningRight")this.panView(1);
+    else if(key==="PanningLeft")this.panView(-1);
     else if(key==="KeyFunction1"){                   /* F1 = 위치 다시 읽기 관례 */
       const p=curPage(),b=p.blocks[state.focusIdx];
       announce(`${pTitle(p)} 페이지, 블록 ${state.focusIdx+1}/${p.blocks.length}, ${b?TYPES[b.type]:""}. ${b&&b.text?b.text:"빈 블록"}`);
@@ -323,20 +323,37 @@ const BLE={
     const p=curPage(),d=new Date(p.created||Date.now());
     this.pushText(`${state.focusIdx+1}/${p.blocks.length} ${d.getMonth()+1}-${d.getDate()}`);
   },
-  /* 그래픽 영역(60×40) = 멀티라인 점자: 20셀×10줄, 셀 피치 3×4px (페이지 방식) */
+  /* 그래픽 영역(60×40) = 멀티라인 점자: 30셀×10줄 = 300셀 (DotPad 320 전면 활용, 셀 피치 2×4px)
+     - 타이핑이 300셀을 넘으면 마지막 화면으로 자동 넘김(새 페이지 넘어가듯)
+     - 팬 키(panView)로 300셀 화면 단위 앞뒤 스크롤 */
+  CELLS_PER_LINE:30,SCREEN:300,
+  viewCells:[],viewOfs:0,_viewText:null,
   pushDoc(text){
     if(!this.connected)return;
+    const cells=text?KB.brailleCells(text):[];
+    if(text!==this._viewText){this._viewText=text;this.viewOfs=0;}   /* 블록 바뀌면 처음부터 */
+    this.viewCells=cells;
+    /* 타이핑 실시간 추적: 300셀 초과 시 커서가 있는 마지막 화면(줄 정렬)으로 넘김 */
+    if(typeof _brFollow!=="undefined"&&_brFollow&&cells.length>this.SCREEN)
+      this.viewOfs=Math.ceil((cells.length-this.SCREEN)/this.CELLS_PER_LINE)*this.CELLS_PER_LINE;
+    else if(this.viewOfs>=cells.length)this.viewOfs=0;
+    this.renderView();
+  },
+  renderView(){
     this.buf.fill(0);
     const POS={1:[0,0],2:[0,1],3:[0,2],4:[1,0],5:[1,1],6:[1,2],7:[0,3],8:[1,3]};
-    const cells=text?KB.brailleCells(text):[];
-    /* 타이핑 실시간 추적: 200셀 초과 시 마지막 페이지(줄 정렬) 표시 */
-    const start=cells.length>200?Math.ceil((cells.length-200)/20)*20:0;
-    const win=cells.slice(start,start+200);
-    win.forEach((dots,i)=>{
-      const cx=(i%20)*3,cy=Math.floor(i/20)*4;
+    this.viewCells.slice(this.viewOfs,this.viewOfs+this.SCREEN).forEach((dots,i)=>{
+      const cx=(i%this.CELLS_PER_LINE)*2,cy=Math.floor(i/this.CELLS_PER_LINE)*4;
       dots.forEach(dt=>{const q=POS[dt];if(q)this.set(cx+q[0],cy+q[1]);});
     });
     this.requestPush();
+  },
+  viewTotal(){return Math.max(1,Math.ceil(this.viewCells.length/this.SCREEN));},
+  panView(dir){                                        /* 팬 키: 화면 스크롤, 경계에서 블록 이동 */
+    const next=this.viewOfs+dir*this.SCREEN;
+    if(next<0||next>=this.viewCells.length){navBlock(dir);return;}
+    this.viewOfs=next;this.renderView();
+    announce(`점자 ${Math.floor(this.viewOfs/this.SCREEN)+1}/${this.viewTotal()} 화면`);
   },
 
   /* 페이지 트리 계층도 → 촉각 그래픽 (F3에서 일시 표시) */
@@ -406,14 +423,17 @@ let _brFollow=false,_brLast=0,_brT2=null;
 const _origOnInput=onInput;
 onInput=function(e,i){_brFollow=true;try{_origOnInput(e,i);}finally{_brFollow=false;}};
 queueBraille=function(text){
-  const follow=_brFollow;
+  const follow=_brFollow;                              /* 호출 시점의 입력 여부 캡처 */
   const run=()=>{
     _brLast=Date.now();
     if(follow){
       const n=text?KB.brailleCells(text).length:0;
       panOfs=n>20?Math.floor((n-1)/20)*20:0;          /* 커서가 있는 마지막 20셀 창 */
     }
-    renderBraille(text||"");
+    /* 트레일링 실행 시점엔 전역 _brFollow가 이미 꺼져 있으므로,
+       렌더(→pushDoc의 300셀 화면 넘김 판단) 동안 캡처값을 복원한다 */
+    const pf=_brFollow;_brFollow=follow;
+    try{renderBraille(text||"");}finally{_brFollow=pf;}
   };
   if(_brT2){clearTimeout(_brT2);_brT2=null;}
   const el=Date.now()-_brLast;
@@ -872,7 +892,7 @@ queueBraille=function(text){
       });
       return out;
     },
-    total(){return Math.ceil(this.cells.length/200);},
+    total(){return Math.max(1,Math.ceil(this.cells.length/BLE.SCREEN));},
     start(){
       if(!BLE.connected){announce("연속 읽기는 닷패드 연결 후 사용할 수 있습니다. 닷패드 연결이라고 말해보세요.");return;}
       this.cells=this.build();
@@ -893,21 +913,16 @@ queueBraille=function(text){
     },
     push(){
       if(!BLE.connected)return;
-      BLE.buf.fill(0);
-      const POS={1:[0,0],2:[0,1],3:[0,2],4:[1,0],5:[1,1],6:[1,2],7:[0,3],8:[1,3]};
-      this.cells.slice(this.pos,this.pos+200).forEach((dots,i)=>{
-        const cx=(i%20)*3,cy=Math.floor(i/20)*4;
-        dots.forEach(dt=>{const q=POS[dt];if(q)BLE.set(cx+q[0],cy+q[1]);});
-      });
-      BLE.requestPush();
-      try{BLE.pushText(`R ${Math.floor(this.pos/200)+1}/${this.total()}`);}catch(e){}
+      BLE.viewCells=this.cells;BLE.viewOfs=this.pos;BLE._viewText=null;
+      BLE.renderView();                                /* 300셀 화면 공용 렌더 */
+      try{BLE.pushText(`R ${Math.floor(this.pos/BLE.SCREEN)+1}/${this.total()}`);}catch(e){}
     },
     pan(dir){
-      const next=this.pos+dir*200;
+      const next=this.pos+dir*BLE.SCREEN;
       if(next<0){announce("문서의 처음입니다.");return;}
       if(next>=this.cells.length){announce("문서의 끝입니다. 에프투로 종료하세요.");return;}
       this.pos=next;this.push();this._save();
-      announce(`${Math.floor(this.pos/200)+1}번째 화면`);
+      announce(`${Math.floor(this.pos/BLE.SCREEN)+1}번째 화면`);
     }
   };
   window.Reader=Reader;
