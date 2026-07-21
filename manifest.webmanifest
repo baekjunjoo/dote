@@ -1,7 +1,7 @@
 {
   "name": "Dote",
   "short_name": "Dote",
-  "description": "시각장애인이 완전히 사용 가능한 노션형 노트 — 스크린리더·키보드·음성·점자 출력 지원",
+  "description": "누구나 한계 없이 만드는 블록 노트 — 스크린리더·점자·음성 출력을 완벽하게",
   "lang": "ko",
   "start_url": ".",
   "scope": ".",
@@ -35,14 +35,14 @@
       "sizes": "1280x660",
       "type": "image/png",
       "form_factor": "wide",
-      "label": "Dote 편집 화면 — 블록 기반 노트와 점자·음성 안내"
+      "label": "메인 편집 화면 — 점자·음성 안내와 블록형 레이아웃"
     },
     {
       "src": "screenshot-narrow.png",
       "sizes": "750x1334",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "모바일 편집 화면"
+      "label": "모바일 편집 화면 — 스크린리더와 제스처에 최적화된 UI"
     }
   ]
 }
