@@ -16,7 +16,7 @@
    renderTree: [16](보관함)→[5](DotPad 상태)→원본 · matchCmd: [15](숫자 명령)→[2](미스로그)→원본
    openPage: [15](Reader 종료)→[8-13](모바일 접힘)→원본 · blockKey/removeBlock/moveBlock/setType: [16](Undo)→원본 */
 "use strict";
-const DOTE_VERSION="0.22.0 (2026-07-16)";
+const DOTE_VERSION="0.22.1 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -726,24 +726,38 @@ queueBraille=function(text){
     RULES.push({kw:[["업데이트",8],["새 버전",8]],run(){announce("업데이트를 적용합니다. 잠시만요.");setTimeout(()=>location.reload(),700);}});
   }
 
-  /* ── [12] 앱 설치 유도: beforeinstallprompt → 사이드바 버튼 + 음성 "설치" ── */
+  /* ── [12] 앱 설치 유도: 버튼 상시 노출 + beforeinstallprompt 있으면 원탭 설치 ──
+     크롬은 삭제 직후·참여도 휴리스틱으로 설치 이벤트를 보류하기도 함 → 이벤트가 없어도
+     브라우저 메뉴 설치는 항상 가능하므로, 버튼은 항상 두고 상황별 경로를 안내한다. */
   let deferredPrompt=null;
+  function isStandalone(){
+    try{return matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;}catch(e){return false;}
+  }
+  function installGuide(){
+    const ua=navigator.userAgent;
+    if(/iPhone|iPad/.test(ua))
+      announce("아이폰은 사파리 하단 공유 버튼을 누른 뒤 홈 화면에 추가를 선택하세요.");
+    else
+      announce("브라우저 메뉴에서 설치할 수 있습니다. 크롬은 주소창 오른쪽 설치 아이콘, 또는 점 세 개 메뉴에서 앱 설치를 선택하세요. 방금 삭제했다면 잠시 후 다시 시도하세요.");
+  }
+  (function(){
+    if(isStandalone())return;                          /* 이미 앱으로 실행 중 */
+    const foot2=document.querySelector(".sidebar-footer");
+    if(!foot2||document.getElementById("installBtn"))return;
+    const b=document.createElement("button");b.className="nav-item";b.id="installBtn";
+    b.innerHTML='<span class="nav-ico" aria-hidden="true">⇩</span><span>앱으로 설치</span>';
+    b.addEventListener("click",async()=>{
+      if(!deferredPrompt){installGuide();return;}      /* 이벤트 보류 시 메뉴 경로 안내 */
+      deferredPrompt.prompt();
+      try{const r=await deferredPrompt.userChoice;
+        announce(r&&r.outcome==="accepted"?"설치를 시작합니다.":"설치를 취소했습니다.");}catch(err){}
+      deferredPrompt=null;
+    });
+    foot2.appendChild(b);
+  })();
   window.addEventListener("beforeinstallprompt",e=>{
     e.preventDefault();deferredPrompt=e;
-    const foot2=document.querySelector(".sidebar-footer");
-    if(foot2&&!document.getElementById("installBtn")){
-      const b=document.createElement("button");b.className="nav-item";b.id="installBtn";
-      b.innerHTML='<span class="nav-ico" aria-hidden="true">⇩</span><span>앱으로 설치</span>';
-      b.addEventListener("click",async()=>{
-        if(!deferredPrompt){announce("지금은 설치 안내를 띄울 수 없습니다.");return;}
-        deferredPrompt.prompt();
-        try{const r=await deferredPrompt.userChoice;
-          announce(r&&r.outcome==="accepted"?"설치를 시작합니다.":"설치를 취소했습니다.");}catch(err){}
-        deferredPrompt=null;
-      });
-      foot2.appendChild(b);
-      announce("도트를 앱으로 설치할 수 있습니다. 사이드바 맨 아래 설치 버튼, 또는 설치라고 말하세요.");
-    }
+    announce("도트를 앱으로 설치할 수 있습니다. 사이드바 맨 아래 설치 버튼, 또는 설치라고 말하세요.");
   });
   window.addEventListener("appinstalled",()=>{
     announce("도트가 앱으로 설치되었습니다. 홈 화면에서 바로 열 수 있습니다.");
@@ -752,7 +766,8 @@ queueBraille=function(text){
   RULES.push({kw:[["설치",8],["앱으로 설치",10]],run(){
     const b=document.getElementById("installBtn");
     if(b)b.click();
-    else announce("지금은 설치 안내를 띄울 수 없습니다. 이미 설치되었거나, 아이폰은 사파리 공유 메뉴에서 홈 화면에 추가를 사용하세요.");
+    else if(isStandalone())announce("이미 앱으로 실행 중입니다.");
+    else installGuide();
   }});
 
   /* ── [13] 모바일 사이드바: 좁은 화면에선 접힌 채 시작 + 페이지 이동 시 자동 접힘 ──

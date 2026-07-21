@@ -1,5 +1,5 @@
 /* Dote 서비스 워커 — 오프라인 우선 (PRD §7: 점역·편집은 네트워크 없이 동작) */
-const C = "dote-v35";
+const C = "dote-v36";
 const CORE = ["./", "index.html", "braille.js", "ebraille.js", "dotpad.js", "templates.js", "superdot-tts.js", "auth.js", "DotPadSDK-3.0.0.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "icon-maskable.png", "apple-touch-icon.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(C).then(c => c.addAll(CORE)));
