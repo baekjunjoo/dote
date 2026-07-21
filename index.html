@@ -176,7 +176,7 @@ hr.meta-divider{border:none;border-top:1px solid var(--border);margin:12px 0 20p
 .t-h1 .handles{padding-top:20px}
 .t-h2 .handles{padding-top:16px}
 .t-h3 .handles{padding-top:11px}
-.t-quote .handles,.t-callout .handles{padding-top:14px}
+.t-quote .handles,.t-callout .handles{padding-top:20px} /* 박스 여백(6+1+10)+텍스트 첫 줄 중심에 핸들 중앙 일치 */
 .block:hover .handles,.block:focus-within .handles{opacity:1}
 .handle{width:24px;height:24px;border-radius:var(--r-sm);color:var(--textDim);font-size:13px;display:grid;place-items:center;padding:0}
 .handle:hover{background:rgba(0,0,0,.06);color:var(--text)}
@@ -202,8 +202,9 @@ hr.meta-divider{border:none;border-top:1px solid var(--border);margin:12px 0 20p
   background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--accent);
   border-radius:var(--r-md);padding:10px 14px;margin:6px 0;
 }
-.marker{padding-top:6px;font-size:13px;flex:none;min-width:18px;text-align:center;color:var(--textDim)}
-.t-callout .marker{color:var(--accent);font-family:var(--font-en);padding-top:12px}
+/* 마커(✦·—·번호)를 본문 첫 줄 라인박스(14.5px×1.75≈25px)에 정확히 얹어 수평 정렬 */
+.marker{padding-top:3px;line-height:25px;font-size:13px;flex:none;min-width:18px;text-align:center;color:var(--textDim)}
+.t-callout .marker{color:var(--accent);font-family:var(--font-en)}
 .t-ol .marker{font-variant-numeric:tabular-nums;font-size:12.5px;font-family:var(--font-mono);color:var(--accent)}
 .block input[type="checkbox"]{margin-top:10px;accent-color:var(--accent);width:15px;height:15px;flex:none}
 .t-todo.done textarea{text-decoration:line-through;color:var(--textDim)}
