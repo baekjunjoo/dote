@@ -17,8 +17,9 @@
 - 이미 훅 된 함수: `announce`, `echoGuard`, `matchCmd`, `renderBraille`, `renderTree`, `toggleMic`, `queueBraille`, `onInput`, `save`. 새 훅을 만들 때는 `const _orig=fn; fn=function(){...}` 패턴 유지.
 - index.html을 재배포할 때 인라인 스크립트 전역 이름을 바꾸면 모듈들이 깨진다.
 
-### dotpad.js 섹션 구성
-[0] superdot-tts 로드 · [1] voice-io(언어감지·음성선별·에코가드) · [2] 미매칭 로그(dote_miss, 캅 100) · [3] 음성 명령 RULES 확장 + 회의록 모드 · [4] BLE 드라이버 · [5] 앱 훅(연결 버튼, renderBraille→pushDoc) · [6] templates.js 로드 · [7] 실시간 점자(120ms 리딩엣지 스로틀 + 입력 시 커서 추적) · [8] 설정(TTS 속도 dote_tts_rate)·사용자 슬롯 · [9] auth.js 로드
+### dotpad.js 섹션 구성 (파일 상단 목차 주석과 동일하게 유지할 것)
+[0] superdot-tts · [1] voice-io · [2] 미매칭 로그 · [3] RULES+회의록 · [4] BLE(다중 기기 미러링) · [5] 앱 훅 · [6] templates.js · [7] 실시간 점자 · [8] UI IIFE(미리보기·저시력·고대비·확대·속도·복원 버튼 + [9]내보내기 [10]온보딩 [11]업데이트 알림 [12]설치 [13]모바일 [14]auth 로드) · [15] 생산성(개요·할일·오늘·Reader) · [16] 유지관리(영역 Undo/Redo·백업 zip·보관함·복원·글자수·용량 경고)
+훅 체인 순서는 dotpad.js 상단 주석 참조. 새 훅 추가 시 그 목차·체인 주석을 함께 갱신한다.
 
 ## DotPad SDK 계약 (실기기 검증 — 의미 변경 금지)
 
@@ -70,6 +71,7 @@ setTimeout(()=>{const w=dom.window,d=w.document;
 ```
 DotPad 시뮬레이터(실기기 없이 BLE 계약 검증): `JSDOM_PATH=<jsdom경로> node test/dotpad-sim.js`
 — 연결 게이트, 점형 일치, 행 차분, keep-alive, 팬/F1~F4, 다중 기기 미러링 18항목.
+앱 감사 스위트(훅·Undo·보관·복원·읽기 회귀): `JSDOM_PATH=<jsdom경로> node test/app-audit.js` — 18항목. 구조 변경 후 두 스위트 모두 통과 필수.
 
 체크포인트: DOTE_VERSION 최신, 블록 렌더 ≥10, 템플릿 8, SDTTS·Auth 로드. jsdom은 file:// localStorage·showModal·scrollIntoView가 없으므로 방어 코드 필수(이미 적용됨).
 

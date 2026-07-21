@@ -1,7 +1,22 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
-   index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
+   index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다.
+
+   섹션 목차:
+   [0] superdot-tts 로드          [1] voice-io(언어감지·에코가드·announce)
+   [2] 미매칭 로그                 [3] 음성 명령 RULES + 회의록 모드
+   [4] DotPad BLE 드라이버(다중 기기)  [5] 앱 훅(연결 버튼·renderBraille→pushDoc·마이크)
+   [6] templates.js 로드           [7] 실시간 점자(120ms 스로틀·커서 추적)
+   [8] UI IIFE ─ 점자 미리보기·저시력/고대비/확대·TTS 속도·사용자 슬롯
+      └ [9] 내보내기(BRF/eBraille/txt/백업 진입) [10] SR 온보딩 [11] PWA 업데이트 알림
+        [12] 앱 설치 유도 [13] 모바일 사이드바 [14] auth.js 로드
+   [15] 생산성 IIFE ─ 개요·할 일·오늘 페이지·연속 읽기(Reader)
+   [16] 유지관리 IIFE ─ 영역 Undo/Redo·전체 백업 zip·보관함(전파·치유)·복원·글자 수·용량 경고
+
+   훅 체인(호출 시 바깥→안): delPage: auth(묘비)→[16](스냅샷)→원본 · save: auth(클라우드)→원본
+   renderTree: [16](보관함)→[5](DotPad 상태)→원본 · matchCmd: [15](숫자 명령)→[2](미스로그)→원본
+   openPage: [15](Reader 종료)→[8-13](모바일 접힘)→원본 · blockKey/removeBlock/moveBlock/setType: [16](Undo)→원본 */
 "use strict";
-const DOTE_VERSION="0.19.0 (2026-07-16)";
+const DOTE_VERSION="0.20.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -248,7 +263,8 @@ const BLE={
       announce(this.devs.length>1
         ?`닷패드 ${this.devs.length}대 연결됨. 모든 기기에 같은 점자가 표시됩니다.`
         :"닷패드 연결됨. 팬 키로 블록 이동, 에프원 위치 읽기, 에프포 전체 읽기.");
-      this.pushAll();
+      if(window.Reader&&window.Reader.on)window.Reader.push();   /* 읽기 중이면 읽기 화면을 새 기기에 */
+      else this.pushAll();
       if(!this._ka)this._ka=setInterval(()=>{        /* keep-alive: 1초마다 1행 재전송(전 기기) */
         if(!this.connected)return;
         const r=(this._kaRow=((this._kaRow||0)+1)%10);
@@ -693,7 +709,7 @@ queueBraille=function(text){
   const as=document.createElement("script");as.src="auth.js";document.body.appendChild(as);
 })();
 
-/* ─────────── [13] 생산성: 개요 탐색 · 할 일 집계 · DotPad 연속 읽기 ───────────
+/* ─────────── [15] 생산성: 개요 탐색 · 할 일 집계 · DotPad 연속 읽기 ───────────
    비시각 생산성의 핵심 = "훑기"와 "다시 찾기".
    - 개요: 시맨틱 헤딩을 목차로 낭독·점프 (음성 "개요"/"N번 섹션", 키보드 Ctrl+Shift+O)
    - 할 일: 전 페이지의 미완료 todo 집계 (음성 "남은 할 일"/"N번 완료", 키보드 Ctrl+Shift+T)
@@ -844,9 +860,9 @@ queueBraille=function(text){
 
   /* ── 3) DotPad 연속 읽기 (정독 모드) ── */
   const Reader={
-    on:false,cells:[],pos:0,
+    on:false,cells:[],pos:0,pageId:null,
     _load(){try{return JSON.parse(localStorage.getItem("dote_readpos")||"{}");}catch(e){return{};}},
-    _save(){try{const o=this._load();o[state.cur]=this.pos;localStorage.setItem("dote_readpos",JSON.stringify(o));}catch(e){}},
+    _save(){try{const o=this._load();o[this.pageId||state.cur]=this.pos;localStorage.setItem("dote_readpos",JSON.stringify(o));}catch(e){}},
     build(){
       const out=[];
       curPage().blocks.forEach(b=>{
@@ -861,6 +877,7 @@ queueBraille=function(text){
       if(!BLE.connected){announce("연속 읽기는 닷패드 연결 후 사용할 수 있습니다. 닷패드 연결이라고 말해보세요.");return;}
       this.cells=this.build();
       if(!this.cells.length){announce("읽을 내용이 없습니다.");return;}
+      this.pageId=state.cur;                          /* 북마크 귀속 페이지 고정(감사 버그#2) */
       const saved=this._load()[state.cur]||0;
       this.pos=(saved>0&&saved<this.cells.length)?saved:0;
       this.on=true;this.push();
@@ -894,6 +911,14 @@ queueBraille=function(text){
     }
   };
   window.Reader=Reader;
+
+  /* 페이지 이동 시 연속 읽기 자동 종료: 이전 페이지 점자가 남고 북마크가 새 페이지에
+     저장되는 문제 방지(감사 버그#2). 위치는 조용히 저장하고 새 페이지는 일반 모드로. */
+  const _openR=openPage;
+  openPage=function(id){
+    if(Reader.on&&id!==Reader.pageId){Reader._save();Reader.on=false;}
+    _openR(id);
+  };
 
   /* 연속 읽기 중 키·전송 라우팅 분리 */
   const _onKey=BLE.onKey.bind(BLE);
@@ -942,7 +967,7 @@ queueBraille=function(text){
   }
 })();
 
-/* ─────────── [15] 3개월 피드백: 실행취소 · 전체 백업 · 보관함 · 글자 수 ───────────
+/* ─────────── [16] 유지관리: 실행취소·전체 백업·보관함·복원·글자 수·용량 경고 ───────────
    (3개월 페르소나 테스트 우선순위 1·2·3·8 — 준서·미란·하늘의 유실/규정/정리 요구) */
 (function(){
   /* ── 1) 실행취소: 블록 연산 스냅샷 스택 (최근 20스텝) ──
@@ -1023,7 +1048,9 @@ queueBraille=function(text){
       UNDO[UNDO.length-1].newPageId=state.pages[state.pages.length-1].id;
   };
   const _bk=blockKey;blockKey=function(e,i){
-    if((e.key==="Enter"&&!e.shiftKey)||(e.key==="Backspace"&&e.target.selectionStart===0&&e.target.selectionEnd===0)){
+    /* 슬래시 메뉴가 열려 있으면 키는 메뉴 조작 — 선택 시 내부 setType이 자체 기록하므로
+       여기서 또 기록하면 이중 스택이 됨(감사 버그#1) */
+    if(!slash.open&&((e.key==="Enter"&&!e.shiftKey)||(e.key==="Backspace"&&e.target.selectionStart===0&&e.target.selectionEnd===0))){
       const s=Math.max(0,i-1);
       recordOp(s,Math.min(3,curPage().blocks.length-s),()=>_bk(e,i));
     }else _bk(e,i);
@@ -1141,6 +1168,15 @@ queueBraille=function(text){
   }
   window.archivePage=archivePage;window.unarchivePage=unarchivePage;
   function renderArchive(){
+    /* 데이터 치유: 병합 동기화가 만들 수 있는 "보관된 부모의 미보관 자식" 고아 방지(감사 버그#3)
+       — 트리에서도 보관함에서도 안 보이게 되므로 자식을 함께 보관 처리 */
+    let healed=false;
+    state.pages.forEach(p=>{
+      if(p.archived)return;
+      let a=state.pages.find(q=>q.id===p.parentId);
+      while(a){if(a.archived){p.archived=true;healed=true;break;}a=state.pages.find(q=>q.id===a.parentId);}
+    });
+    if(healed)save();
     /* 현역 트리에서 보관 페이지 숨김 + 보관 버튼 주입 */
     state.pages.forEach(p=>{
       if(!p.archived)return;
