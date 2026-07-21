@@ -1,7 +1,7 @@
 /* ═══ Dote 보강 모듈 — dotpad-dev·voice-io·offline-matcher·tactile-ux 스킬 이식 ═══
    index.html 뒤에 로드되어 전역 렉시컬 스코프(state, RULES, announce 등)를 공유·확장한다. */
 "use strict";
-const DOTE_VERSION="0.18.0 (2026-07-16)";
+const DOTE_VERSION="0.19.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -497,6 +497,8 @@ queueBraille=function(text){
     +'<label for="zoomRange" style="display:block;font-size:13px;margin:16px 0 6px">화면 확대 <strong id="zoomVal"></strong></label>'
     +'<input type="range" id="zoomRange" min="100" max="200" step="25" style="width:100%;accent-color:var(--accent)" aria-label="화면 확대, 100에서 200퍼센트, 좌우 화살표로 조절">'
     +'<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer"><input type="checkbox" id="bbChk" style="accent-color:var(--accent);width:18px;height:18px">점자 미리보기 표시 <span style="font-size:11px;color:var(--textDim)">(화면 하단 · 교사·부모 검수용)</span></label>'
+    +'<button class="btn" id="restoreBtn" style="border:1px solid var(--border);margin-top:16px">백업 복원 (.zip / .json)</button>'
+    +'<input type="file" id="restoreFile" accept=".zip,.json,application/json,application/zip" style="display:none" aria-hidden="true">'
     +'<div style="display:flex;gap:8px;margin-top:14px">'
     +'<button class="btn" id="rateTest" style="border:1px solid var(--border)">들어보기</button>'
     +'<button class="btn-cta" id="setClose">닫기</button></div></div>';
@@ -506,6 +508,12 @@ queueBraille=function(text){
   const bbc=dlg.querySelector("#bbChk");
   bbc.checked=bbOn();
   bbc.addEventListener("change",()=>{setBB(bbc.checked);announce(bbc.checked?"점자 미리보기를 화면에 표시합니다.":"점자 미리보기를 숨겼습니다.");});
+  const rstB=dlg.querySelector("#restoreBtn"),rstF=dlg.querySelector("#restoreFile");
+  rstB.addEventListener("click",()=>{announce("복원할 백업 파일을 선택하세요. 전체 백업으로 받은 zip 또는 JSON 파일입니다.");rstF.click();});
+  rstF.addEventListener("change",()=>{
+    if(rstF.files&&rstF.files[0]&&window.restoreFromFile)window.restoreFromFile(rstF.files[0]);
+    rstF.value="";
+  });
   const lvc=dlg.querySelector("#lvChk");
   lvc.checked=lvOn();
   lvc.addEventListener("change",()=>{setLV(lvc.checked);announce(lvc.checked?"저시력 모드를 켰습니다. 글자가 커지고 대비가 강해집니다.":"저시력 모드를 껐습니다.");});
@@ -940,51 +948,99 @@ queueBraille=function(text){
   /* ── 1) 실행취소: 블록 연산 스냅샷 스택 (최근 20스텝) ──
      텍스트 타이핑은 브라우저 기본 Ctrl+Z가 담당, 여기는 구조 변화만:
      블록 삭제·이동·유형변경·분할·병합·페이지 삭제 */
-  const UNDO=[],UMAX=20;
-  function snapPage(){
-    const p=curPage();
-    UNDO.push({type:"page",id:p.id,blocks:JSON.parse(JSON.stringify(p.blocks)),focus:state.focusIdx});
+  /* v2: 페이지 전체 스냅샷은 이후의 다른 블록 편집까지 되돌리는 부작용(2주 테스트 준서 지적)
+     → 변경된 블록 "영역"만 기록/복원해 무관한 편집을 보존. Redo 지원. 최근 20스텝, 세션 한정. */
+  const UNDO=[],REDO=[],UMAX=20;
+  const cp=x=>JSON.parse(JSON.stringify(x));
+  function recordOp(start,preLen,fn){
+    const p=curPage(),pid=p.id;
+    start=Math.max(0,Math.min(start,p.blocks.length));
+    preLen=Math.max(0,Math.min(preLen,p.blocks.length-start));
+    const pre=cp(p.blocks.slice(start,start+preLen));
+    const lenBefore=p.blocks.length;
+    fn();
+    const post=preLen+(p.blocks.length-lenBefore);
+    const after=cp(p.blocks.slice(start,start+post));
+    if(JSON.stringify(after)===JSON.stringify(pre))return;      /* 무변화 연산은 기록 안 함 */
+    UNDO.push({kind:"region",pid,start,pre,post,focus:state.focusIdx});
     if(UNDO.length>UMAX)UNDO.shift();
+    REDO.length=0;
+  }
+  function applyRegion(e,toStack){
+    const p=state.pages.find(x=>x.id===e.pid);
+    if(!p){announce("되돌릴 페이지가 없습니다.");return false;}
+    const cur=cp(p.blocks.slice(e.start,e.start+e.post));
+    p.blocks.splice(e.start,e.post,...cp(e.pre));
+    toStack.push({kind:"region",pid:e.pid,start:e.start,pre:cur,post:e.pre.length,focus:state.focusIdx});
+    if(toStack.length>UMAX)toStack.shift();
+    p.updated=Date.now();
+    if(p.id===state.cur){renderBlocks();focusBlock(Math.min(e.start,Math.max(0,p.blocks.length-1)));}
+    return true;
+  }
+  function applyAll(e,toStack){
+    toStack.push({kind:"all",pages:cp(state.pages),cur:state.cur});
+    if(toStack.length>UMAX)toStack.shift();
+    state.pages=e.pages;
+    state.cur=e.pages.find(x=>x.id===e.cur)?e.cur:e.pages[0].id;
+    try{                                               /* 복원 페이지 묘비 해제(동기화가 다시 지우지 않게) */
+      const tb=JSON.parse(localStorage.getItem("dote_tombs")||"{}");let ch=false;
+      state.pages.forEach(p=>{if(tb[p.id]){delete tb[p.id];p.updated=Date.now();ch=true;}});
+      if(ch)localStorage.setItem("dote_tombs",JSON.stringify(tb));
+    }catch(err){}
+    renderAll();
   }
   function doteUndo(){
-    const u=UNDO.pop();
-    if(!u){announce("되돌릴 작업이 없습니다.");return;}
-    if(u.type==="page"){
-      const p=state.pages.find(x=>x.id===u.id);
-      if(!p){announce("되돌릴 페이지가 없습니다.");return;}
-      p.blocks=u.blocks;p.updated=Date.now();
-      if(p.id===state.cur){renderBlocks();focusBlock(Math.min(u.focus,p.blocks.length-1));}
-    }else{
-      state.pages=u.pages;
-      state.cur=u.pages.find(x=>x.id===u.cur)?u.cur:u.pages[0].id;
-      /* 복원된 페이지의 삭제 묘비 해제(동기화가 다시 지우지 않게) */
-      try{
-        const tb=JSON.parse(localStorage.getItem("dote_tombs")||"{}");let ch=false;
-        state.pages.forEach(p=>{if(tb[p.id]){delete tb[p.id];p.updated=Date.now();ch=true;}});
-        if(ch)localStorage.setItem("dote_tombs",JSON.stringify(tb));
-      }catch(e){}
-      renderAll();
+    const e=UNDO.pop();
+    if(!e){announce("되돌릴 작업이 없습니다.");return;}
+    if(e.kind==="all")applyAll(e,REDO);
+    else{
+      if(!applyRegion(e,REDO))return;
+      if(e.newPageId){                                 /* 유형 전환이 만든 빈 하위 페이지 정리 */
+        const ix=state.pages.findIndex(p=>p.id===e.newPageId&&p.blocks.length<=1&&!(p.blocks[0]&&p.blocks[0].text));
+        if(ix>=0){state.pages.splice(ix,1);renderTree();}
+      }
     }
     save();announce("실행취소했습니다.");
   }
-  window.doteUndo=doteUndo;
-  const _rm=removeBlock;removeBlock=function(i){snapPage();_rm(i);};
-  const _mv=moveBlock;moveBlock=function(i,d){snapPage();_mv(i,d);};
-  const _st2=setType;setType=function(i,ty){snapPage();_st2(i,ty);};
+  function doteRedo(){
+    const e=REDO.pop();
+    if(!e){announce("다시 실행할 작업이 없습니다.");return;}
+    if(e.kind==="all")applyAll(e,UNDO);
+    else if(!applyRegion(e,UNDO))return;
+    save();announce("다시 실행했습니다.");
+  }
+  window.doteUndo=doteUndo;window.doteRedo=doteRedo;
+  const _rm=removeBlock;removeBlock=function(i){recordOp(i,1,()=>_rm(i));};
+  const _mv=moveBlock;moveBlock=function(i,d){
+    const p=curPage(),j=i+d;
+    if(j<0||j>=p.blocks.length){_mv(i,d);return;}      /* 경계: 이동 없음 → 기록 안 함 */
+    recordOp(Math.min(i,j),2,()=>_mv(i,d));
+  };
+  const _st2=setType;setType=function(i,ty){
+    const before=state.pages.length;
+    recordOp(i,1,()=>_st2(i,ty));
+    if(state.pages.length>before&&UNDO.length)
+      UNDO[UNDO.length-1].newPageId=state.pages[state.pages.length-1].id;
+  };
   const _bk=blockKey;blockKey=function(e,i){
-    if((e.key==="Enter"&&!e.shiftKey)||(e.key==="Backspace"&&e.target.selectionStart===0&&e.target.selectionEnd===0))snapPage();
-    _bk(e,i);
+    if((e.key==="Enter"&&!e.shiftKey)||(e.key==="Backspace"&&e.target.selectionStart===0&&e.target.selectionEnd===0)){
+      const s=Math.max(0,i-1);
+      recordOp(s,Math.min(3,curPage().blocks.length-s),()=>_bk(e,i));
+    }else _bk(e,i);
   };
   const _dp3=delPage;delPage=function(id){
     const before=JSON.stringify(state.pages),cur=state.cur;
     _dp3(id);
     if(JSON.stringify(state.pages)!==before){
-      UNDO.push({type:"all",pages:JSON.parse(before),cur});
-      if(UNDO.length>UMAX)UNDO.shift();
+      UNDO.push({kind:"all",pages:JSON.parse(before),cur});
+      if(UNDO.length>UMAX)UNDO.shift();REDO.length=0;
     }
   };
   document.addEventListener("keydown",e=>{
-    if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==="z"){e.preventDefault();doteUndo();}
+    if((e.ctrlKey||e.metaKey)&&e.altKey&&e.key.toLowerCase()==="z"){
+      e.preventDefault();
+      e.shiftKey?doteRedo():doteUndo();
+    }
   });
 
   /* ── 2) 전체 백업: JSON(복원용) + 페이지별 BRF(열람용) → 단일 zip ── */
@@ -1067,19 +1123,21 @@ queueBraille=function(text){
   /* ── 3) 보관함: 끝난 문서를 현역 트리에서 치우되 검색·데이터는 유지 ── */
   function archivePage(id){
     const p=state.pages.find(x=>x.id===id);if(!p)return;
-    p.archived=true;p.updated=Date.now();
-    if(state.cur===id){
+    const targets=[p,...descendants(id)];              /* 하위 페이지까지 함께 보관(할 일 집계 잔존 버그 수정) */
+    targets.forEach(x=>{x.archived=true;x.updated=Date.now();});
+    if(targets.some(x=>x.id===state.cur)){
       const n=state.pages.find(x=>!x.archived);
       if(n)openPage(n.id);else openPage(newPage(null).id);
     }
     renderTree();save();
-    announce(`${pTitle(p)} 페이지를 보관함으로 옮겼습니다. 검색에는 계속 나옵니다.`);
+    announce(`${pTitle(p)} 페이지${targets.length>1?` 외 하위 ${targets.length-1}개`:""}를 보관함으로 옮겼습니다. 검색에는 계속 나옵니다.`);
   }
   function unarchivePage(id){
     const p=state.pages.find(x=>x.id===id);if(!p)return;
-    p.archived=false;p.updated=Date.now();
+    const targets=[p,...descendants(id)].filter(x=>x.archived);
+    targets.forEach(x=>{x.archived=false;x.updated=Date.now();});
     renderTree();save();
-    announce(`${pTitle(p)} 페이지를 보관함에서 꺼냈습니다.`);
+    announce(`${pTitle(p)} 페이지${targets.length>1?` 외 ${targets.length-1}개`:""}를 보관함에서 꺼냈습니다.`);
   }
   window.archivePage=archivePage;window.unarchivePage=unarchivePage;
   function renderArchive(){
@@ -1102,7 +1160,7 @@ queueBraille=function(text){
     });
     /* 보관함 섹션 */
     let sec=document.getElementById("archSec");
-    const arch=state.pages.filter(p=>p.archived);
+    const arch=state.pages.filter(p=>p.archived&&!state.pages.find(q=>q.id===p.parentId&&q.archived));
     if(!sec){
       sec=document.createElement("div");sec.className="sidebar-section";sec.id="archSec";
       sec.innerHTML='<div class="section-header"><span class="sec-label">보관함</span></div><ul id="archList"></ul>';
@@ -1136,12 +1194,62 @@ queueBraille=function(text){
     const cur=(b&&b.text)?b.text.length:0;
     const curNs=(b&&b.text)?b.text.replace(/\s/g,"").length:0;
     const tot=p.blocks.reduce((s,x)=>s+(x.text?x.text.length:0),0);
-    announce(`현재 블록 ${cur}자, 공백 빼면 ${curNs}자. 페이지 전체 ${tot}자.`);
+    const totNs=p.blocks.reduce((s,x)=>s+(x.text?x.text.replace(/\s/g,"").length:0),0);
+    announce(`현재 블록 ${cur}자, 공백 빼면 ${curNs}자. 페이지 전체 ${tot}자, 공백 빼면 ${totNs}자.`);
   }
   window.charCount=charCount;
 
+  /* ── 2b) 백업 복원: JSON 또는 백업 zip → 페이지 병합(최신 우선, 기존 문서 유지) ── */
+  function restoreFromData(data){
+    if(!data||!Array.isArray(data.pages)||!data.pages.length){announce("복원할 페이지가 없는 파일입니다.");return;}
+    const byId={};state.pages.forEach(p=>{byId[p.id]=p;});
+    let added=0,updated=0;
+    data.pages.forEach(rp=>{
+      const lp=byId[rp.id];
+      if(!lp){byId[rp.id]=rp;added++;}
+      else if((rp.updated||0)>(lp.updated||0)){byId[rp.id]=rp;updated++;}
+    });
+    state.pages=Object.values(byId);
+    try{                                               /* 복원 페이지 묘비 해제 */
+      const tb=JSON.parse(localStorage.getItem("dote_tombs")||"{}");let ch=false;
+      data.pages.forEach(p=>{if(tb[p.id]){delete tb[p.id];ch=true;const q=state.pages.find(x=>x.id===p.id);if(q)q.updated=Date.now();}});
+      if(ch)localStorage.setItem("dote_tombs",JSON.stringify(tb));
+    }catch(e){}
+    if(!state.pages.find(p=>p.id===state.cur))state.cur=state.pages[0].id;
+    renderAll();save();
+    announce(`복원 완료. 새 페이지 ${added}개, 갱신 ${updated}개. 기존 문서는 그대로 유지했습니다.`);
+  }
+  async function restoreFromFile(file){
+    try{
+      if(/\.zip$/i.test(file.name)){
+        const u8=new Uint8Array(await file.arrayBuffer());
+        const entries=EB.zipReadStored(u8);
+        const key=Object.keys(entries).find(k=>k.endsWith("dote-backup.json"));
+        if(!key){announce("이 zip에는 도트 백업 파일이 없습니다.");return;}
+        restoreFromData(JSON.parse(new TextDecoder().decode(entries[key])));
+      }else{
+        restoreFromData(JSON.parse(await file.text()));
+      }
+    }catch(e){announce("복원에 실패했습니다. 파일이 도트 백업인지 확인하세요.");}
+  }
+  window.restoreFromData=restoreFromData;window.restoreFromFile=restoreFromFile;
+
+  /* ── 5) 저장 용량 경고 (localStorage 한계 임시 방어 — 저장소 개편 전까지) ── */
+  let capWarned=false;
+  setInterval(()=>{
+    if(capWarned)return;
+    try{
+      const used=(localStorage.getItem("dote2")||"").length*2;
+      if(used>4*1024*1024){
+        capWarned=true;
+        announce("저장 공간이 거의 찼습니다. 설정에서 전체 백업을 받은 뒤 오래된 페이지를 보관하거나 삭제해 주세요.");
+      }
+    }catch(e){}
+  },60000);
+
   RULES.push(
     {kw:[["실행취소",10],["실행 취소",10],["되돌려",9],["방금 취소",9]],run(){doteUndo();}},
+    {kw:[["다시 실행",10],["다시실행",10],["리두",8]],run(){doteRedo();}},
     {kw:[["전체 백업",10],["백업",8],["모두 내보내",9]],run(){exportBackup();}},
     {kw:[["보관해",10],["보관함으로",10],["페이지 보관",10]],run(){archivePage(state.cur);}},
     {kw:[["글자 수",9],["글자수",9],["몇 자",8],["몇 글자",9]],run(){charCount();}}
@@ -1151,7 +1259,7 @@ queueBraille=function(text){
   const ht=document.querySelector("#helpDlg table");
   if(ht){
     const r=document.createElement("tr");
-    r.innerHTML='<td>Ctrl+Alt+Z</td><td>실행취소 (블록 삭제·이동·병합 복구) — 음성 "실행취소"</td>';
+    r.innerHTML='<td>Ctrl+Alt+Z / +Shift</td><td>실행취소 / 다시 실행 — 음성 "실행취소"·"다시 실행"</td>';
     ht.appendChild(r);
     const r2=document.createElement("tr");
     r2.innerHTML='<td>음성 (관리)</td><td>"전체 백업" · "보관해" · "글자 수"</td>';
