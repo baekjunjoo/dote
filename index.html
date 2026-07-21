@@ -910,7 +910,7 @@ function openFind(){
 }
 function renderFind(q){
   q=q.toLowerCase();
-  findItems=state.pages.filter(p=>!q||pTitle(p).toLowerCase().includes(q)||p.blocks.some(b=>(b.text||"").toLowerCase().includes(q)));
+  findItems=state.pages.filter(p=>!p.trashed&&(!q||pTitle(p).toLowerCase().includes(q)||p.blocks.some(b=>(b.text||"").toLowerCase().includes(q))));
   const ul=$("#findList");ul.innerHTML="";
   findItems.forEach((p,i)=>{
     const li=document.createElement("li");li.setAttribute("role","option");li.setAttribute("aria-selected",i===findSel);

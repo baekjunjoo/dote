@@ -16,7 +16,7 @@
    renderTree: [16](보관함)→[5](DotPad 상태)→원본 · matchCmd: [15](숫자 명령)→[2](미스로그)→원본
    openPage: [15](Reader 종료)→[8-13](모바일 접힘)→원본 · blockKey/removeBlock/moveBlock/setType: [16](Undo)→원본 */
 "use strict";
-const DOTE_VERSION="0.22.1 (2026-07-16)";
+const DOTE_VERSION="0.23.0 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -817,7 +817,7 @@ queueBraille=function(text){
   function todoItems(){
     const out=[];
     state.pages.forEach(p=>{
-      if(p.archived)return;                            /* 보관된 페이지의 할 일은 집계 제외 */
+      if(p.archived||p.trashed)return;                 /* 보관·휴지통 페이지의 할 일은 집계 제외 */
       p.blocks.forEach((b,i)=>{
         if(b.type==="todo"&&!b.checked&&b.text&&b.text.trim())out.push({p,b,i});
       });
@@ -844,7 +844,7 @@ queueBraille=function(text){
   }
   function dailyPage(){
     const d=new Date(),title=`${d.getMonth()+1}월 ${d.getDate()}일`;
-    let p=state.pages.find(x=>x.title===title);
+    let p=state.pages.find(x=>x.title===title&&!x.trashed);
     if(!p){
       p=newPage(null,title);p.icon="📅";
       p.blocks=[nb("h2","오늘 할 일"),nb("todo",""),nb("h2","메모"),nb("p","")];
@@ -1267,7 +1267,7 @@ queueBraille=function(text){
     });
     /* 보관함 섹션 */
     let sec=document.getElementById("archSec");
-    const arch=state.pages.filter(p=>p.archived&&!state.pages.find(q=>q.id===p.parentId&&q.archived));
+    const arch=state.pages.filter(p=>p.archived&&!p.trashed&&!state.pages.find(q=>q.id===p.parentId&&q.archived));
     if(!sec){
       sec=document.createElement("div");sec.className="sidebar-section";sec.id="archSec";
       sec.innerHTML='<div class="section-header"><span class="sec-label">보관함</span></div><ul id="archList"></ul>';
@@ -1371,5 +1371,151 @@ queueBraille=function(text){
     const r2=document.createElement("tr");
     r2.innerHTML='<td>음성 (관리)</td><td>"전체 백업" · "보관해" · "글자 수"</td>';
     ht.appendChild(r2);
+  }
+})();
+
+/* ─────────── [17] 휴지통: 즉시 삭제 → 복원 가능 (2단계 확인은 완전 삭제에만) ───────────
+   기존 "4초 내 재실행" 2단계 삭제가 느리다는 피드백 → 노션식 휴지통으로 교체.
+   - 삭제 = 즉시 휴지통 이동(하위 페이지 포함), 언제든 복원
+   - 완전 삭제만 2단계 확인 유지 + 동기화 묘비 기록
+   - 30일 지난 휴지통 항목은 시작 시 자동 정리 */
+(function(){
+  const TRASH_TTL=30*24*3600*1000;
+  function tombstone(ids){
+    try{
+      const tb=JSON.parse(localStorage.getItem("dote_tombs")||"{}");
+      ids.forEach(id=>tb[id]=Date.now());
+      localStorage.setItem("dote_tombs",JSON.stringify(tb));
+    }catch(e){}
+  }
+  function leaveTrashedCur(){
+    if(!state.pages.find(p=>p.id===state.cur&&!p.trashed))
+    {
+      const n=state.pages.find(p=>!p.trashed&&!p.archived)||state.pages.find(p=>!p.trashed);
+      if(n)openPage(n.id);else openPage(newPage(null).id);
+    }
+  }
+  /* 삭제 = 휴지통 이동 (delPage 의미 교체 — 트리 🗑 버튼·Delete 키·음성 "페이지 삭제" 공통) */
+  delPage=function(id){
+    const p=state.pages.find(x=>x.id===id);if(!p)return;
+    if(p.trashed){purgePage(id);return;}               /* 휴지통 안에서 삭제 = 완전 삭제 절차 */
+    const targets=[p,...descendants(id)].filter(x=>!x.trashed);
+    targets.forEach(x=>{x.trashed=true;x.trashedAt=Date.now();x.updated=Date.now();});
+    leaveTrashedCur();
+    renderTree();save();
+    announce(`${pTitle(p)} 페이지${targets.length>1?` 외 하위 ${targets.length-1}개`:""}를 휴지통으로 옮겼습니다. 사이드바 휴지통에서 복원할 수 있습니다.`);
+  };
+  function restoreTrash(id){
+    const p=state.pages.find(x=>x.id===id);if(!p)return;
+    const targets=[p,...descendants(id)].filter(x=>x.trashed);
+    targets.forEach(x=>{x.trashed=false;delete x.trashedAt;x.updated=Date.now();});
+    renderTree();save();
+    announce(`${pTitle(p)} 페이지${targets.length>1?` 외 ${targets.length-1}개`:""}를 복원했습니다.`);
+  }
+  let purgeArm=null;
+  function purgePage(id){
+    const p=state.pages.find(x=>x.id===id);if(!p)return;
+    const targets=[p,...descendants(id)];
+    if(!(purgeArm&&purgeArm.id===id&&Date.now()-purgeArm.t<4000)){
+      purgeArm={id,t:Date.now()};
+      announce(`${pTitle(p)}${targets.length>1?` 외 ${targets.length-1}개`:""}를 완전히 삭제하려면 4초 안에 한 번 더 실행하세요. 복원할 수 없습니다.`);
+      return;
+    }
+    purgeArm=null;
+    const ids=new Set(targets.map(x=>x.id));
+    state.pages=state.pages.filter(x=>!ids.has(x.id));
+    state.pages.forEach(pg=>pg.blocks=pg.blocks.filter(b=>b.type!=="page"||!ids.has(b.pageId)));
+    tombstone([...ids]);
+    if(!state.pages.length)newPage(null);
+    leaveTrashedCur();
+    renderTree();save();
+    announce("완전히 삭제했습니다.");
+  }
+  window.restoreTrash=restoreTrash;window.purgePage=purgePage;
+
+  /* 휴지통 섹션 렌더 (보관함 아래) */
+  function renderTrash(){
+    state.pages.forEach(p=>{                           /* 현역 트리에서 숨김 */
+      if(!p.trashed)return;
+      const li=document.querySelector(`[role="treeitem"][data-id="${p.id}"]`);
+      if(li)li.style.display="none";
+    });
+    let sec=document.getElementById("trashSec");
+    const items=state.pages.filter(p=>p.trashed&&!state.pages.find(q=>q.id===p.parentId&&q.trashed));
+    if(!sec){
+      sec=document.createElement("div");sec.className="sidebar-section";sec.id="trashSec";
+      sec.innerHTML='<div class="section-header"><span class="sec-label">휴지통</span></div><ul id="trashList"></ul>';
+      const sb=document.getElementById("sidebar");
+      sb.insertBefore(sec,sb.querySelector(".sidebar-footer"));
+    }
+    sec.style.display=items.length?"":"none";
+    const ul=sec.querySelector("#trashList");ul.innerHTML="";
+    items.forEach(p=>{
+      const li=document.createElement("li");
+      const row=document.createElement("div");row.className="tree-row";row.tabIndex=0;
+      row.setAttribute("role","button");
+      row.setAttribute("aria-label",`휴지통: ${pTitle(p)}. 엔터로 복원`);
+      const tt=document.createElement("span");tt.className="tree-title";tt.textContent=pTitle(p);
+      const del=document.createElement("button");del.className="chev";del.textContent="✕";
+      del.setAttribute("aria-label",`${pTitle(p)} 완전 삭제 (두 번 실행)`);
+      del.addEventListener("click",e=>{e.stopPropagation();purgePage(p.id);});
+      row.append(tt,del);
+      row.addEventListener("click",()=>restoreTrash(p.id));
+      row.addEventListener("keydown",e=>{if(e.key==="Enter")restoreTrash(p.id);});
+      li.appendChild(row);ul.appendChild(li);
+    });
+  }
+  const _rt4=renderTree;
+  renderTree=function(){_rt4();renderTrash();};
+
+  /* 30일 자동 비우기 (시작 시 1회) */
+  (function(){
+    const old=state.pages.filter(p=>p.trashed&&p.trashedAt&&Date.now()-p.trashedAt>TRASH_TTL);
+    if(old.length){
+      const ids=new Set();
+      old.forEach(p=>{ids.add(p.id);descendants(p.id).forEach(x=>ids.add(x.id));});
+      state.pages=state.pages.filter(x=>!ids.has(x.id));
+      tombstone([...ids]);
+      if(!state.pages.length)newPage(null);
+      leaveTrashedCur();save();
+      setTimeout(()=>announce(`휴지통에서 30일이 지난 페이지 ${ids.size}개를 자동 정리했습니다.`),1500);
+    }
+  })();
+  renderTrash();
+
+  /* 음성: "휴지통" 목록 낭독, "N번 복원", "복원"(가장 최근) */
+  let lastTrashList=[];
+  const _mc4=matchCmd;
+  matchCmd=function(text){
+    const s=String(text).replace(/\s/g,"");
+    const m=s.match(/^(\d+)번(째)?복원/);
+    if(m){
+      const x=lastTrashList[parseInt(m[1],10)-1];
+      if(x)restoreTrash(x.id);else announce(`${m[1]}번 항목이 없습니다. 먼저 휴지통이라고 말해보세요.`);
+      return true;
+    }
+    return _mc4(text);
+  };
+  RULES.push(
+    {kw:[["휴지통",9],["휴지통 열어",10]],run(){
+      lastTrashList=state.pages.filter(p=>p.trashed&&!state.pages.find(q=>q.id===p.parentId&&q.trashed))
+        .sort((a,b)=>(b.trashedAt||0)-(a.trashedAt||0));
+      if(!lastTrashList.length){announce("휴지통이 비어 있습니다.");return;}
+      announce(`휴지통 ${lastTrashList.length}개. `
+        +lastTrashList.slice(0,5).map((p,n)=>`${n+1}. ${pTitle(p)}`).join(". ")
+        +(lastTrashList.length>5?". 이하 생략":"")+". 복원하려면 몇 번 복원.");
+    }},
+    {kw:[["복원해",9],["방금 삭제 취소",10],["삭제 취소",9]],run(){
+      const p=state.pages.filter(x=>x.trashed).sort((a,b)=>(b.trashedAt||0)-(a.trashedAt||0))[0];
+      if(p)restoreTrash(p.id);else announce("휴지통이 비어 있습니다.");
+    }}
+  );
+
+  /* 도움말 갱신 */
+  const ht=document.querySelector("#helpDlg table");
+  if(ht){
+    const r=document.createElement("tr");
+    r.innerHTML='<td>삭제</td><td>즉시 휴지통 이동(하위 포함) — 복원: 휴지통에서 엔터, 음성 "복원해"·"휴지통". 완전 삭제만 2단계 확인</td>';
+    ht.appendChild(r);
   }
 })();

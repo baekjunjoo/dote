@@ -87,6 +87,26 @@ try{
   w.restoreFromData(data);
   t.ok("복원 병합",/복원 완료/.test(status()),status());
 
+  console.log("\n[G] 휴지통 — 즉시 삭제·복원·완전 삭제");
+  w.matchCmd("새 페이지");
+  const title=d.getElementById("pageTitle");
+  title.value="휴지통테스트";title.dispatchEvent(new w.Event("input",{bubbles:true}));
+  await wait(100);
+  w.matchCmd("페이지 삭제");                             /* 1회 = 즉시 휴지통 */
+  t.ok("즉시 휴지통 이동",/휴지통으로 옮겼습니다/.test(status()),status());
+  const sec=d.getElementById("trashSec");
+  t.ok("휴지통 섹션 표시",sec&&sec.style.display!=="none");
+  w.matchCmd("휴지통");
+  t.ok("휴지통 낭독",/휴지통 \d+개.*휴지통테스트/.test(status()),status());
+  w.matchCmd("1번 복원");
+  t.ok("번호 복원",/복원했습니다/.test(status()),status());
+  w.matchCmd("페이지 삭제");                             /* 다시 버리고 완전 삭제 */
+  const target=[...d.querySelectorAll("#trashList .chev")].pop();
+  target.click();
+  t.ok("완전 삭제 1단계 확인",/완전히 삭제하려면/.test(status()),status());
+  target.click();
+  t.ok("완전 삭제 실행",/완전히 삭제했습니다/.test(status()),status());
+
   console.log("\n[F] 생산성·설정 스모크");
   w.matchCmd("개요");t.ok("개요 응답",/개요\.|제목 블록이 없습니다/.test(status()));
   w.matchCmd("글자 수");t.ok("글자 수(공백제외 포함)",/공백 빼면 \d+자\./.test(status()));
