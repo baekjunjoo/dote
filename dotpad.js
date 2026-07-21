@@ -16,7 +16,7 @@
    renderTree: [16](보관함)→[5](DotPad 상태)→원본 · matchCmd: [15](숫자 명령)→[2](미스로그)→원본
    openPage: [15](Reader 종료)→[8-13](모바일 접힘)→원본 · blockKey/removeBlock/moveBlock/setType: [16](Undo)→원본 */
 "use strict";
-const DOTE_VERSION="0.24.0 (2026-07-16)";
+const DOTE_VERSION="0.24.1 (2026-07-16)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -1454,19 +1454,48 @@ queueBraille=function(text){
       const li=document.createElement("li");
       const row=document.createElement("div");row.className="tree-row";row.tabIndex=0;
       row.setAttribute("role","button");
-      row.setAttribute("aria-label",`휴지통: ${pTitle(p)}. 엔터로 복원`);
+      row.setAttribute("aria-label",`휴지통: ${pTitle(p)}. 엔터로 열어서 내용 확인`);
       const tt=document.createElement("span");tt.className="tree-title";tt.textContent=pTitle(p);
+      const res=document.createElement("button");res.className="chev";res.textContent="⬆";
+      res.setAttribute("aria-label",`${pTitle(p)} 복원`);
+      res.addEventListener("click",e=>{e.stopPropagation();restoreTrash(p.id);});
       const del=document.createElement("button");del.className="chev";del.textContent="✕";
       del.setAttribute("aria-label",`${pTitle(p)} 완전 삭제 (두 번 실행)`);
       del.addEventListener("click",e=>{e.stopPropagation();purgePage(p.id);});
-      row.append(tt,del);
-      row.addEventListener("click",()=>restoreTrash(p.id));
-      row.addEventListener("keydown",e=>{if(e.key==="Enter")restoreTrash(p.id);});
+      row.append(tt,res,del);
+      row.addEventListener("click",()=>openPage(p.id));      /* 들어가서 확인 후 결정 */
+      row.addEventListener("keydown",e=>{if(e.key==="Enter")openPage(p.id);});
       li.appendChild(row);ul.appendChild(li);
     });
+    renderTrashBanner();
+  }
+
+  /* 휴지통 페이지를 열었을 때: 편집기 상단 배너로 상태 안내 + 복원/완전 삭제 */
+  function renderTrashBanner(){
+    const cur=state.pages.find(p=>p.id===state.cur);
+    let bn=document.getElementById("trashBanner");
+    if(!cur||!cur.trashed){if(bn)bn.remove();return;}
+    if(!bn){
+      bn=document.createElement("div");bn.id="trashBanner";bn.setAttribute("role","region");
+      bn.setAttribute("aria-label","휴지통 페이지 안내");
+      bn.style.cssText="display:flex;align-items:center;gap:10px;padding:9px 20px;background:var(--surface);border-bottom:1px solid var(--borderStrong);font-size:13px";
+      bn.innerHTML='<span>이 페이지는 휴지통에 있습니다.</span>'
+        +'<button class="btn" id="tbRestore" style="border:1px solid var(--borderStrong)">복원</button>'
+        +'<button class="btn" id="tbPurge" style="border:1px solid var(--borderStrong)">완전 삭제</button>';
+      const col=document.getElementById("editorCol");
+      col.insertBefore(bn,document.getElementById("editorScroll"));
+      bn.querySelector("#tbRestore").addEventListener("click",()=>restoreTrash(state.cur));
+      bn.querySelector("#tbPurge").addEventListener("click",()=>purgePage(state.cur));
+    }
   }
   const _rt4=renderTree;
   renderTree=function(){_rt4();renderTrash();};
+  const _openT=openPage;
+  openPage=function(id){
+    _openT(id);
+    const p=state.pages.find(x=>x.id===id);
+    if(p&&p.trashed)announce("휴지통에 있는 페이지입니다. 내용을 확인하고 복원 또는 완전 삭제를 선택하세요. 완전 삭제라고 말해도 됩니다.");
+  };
 
   /* 30일 자동 비우기 (시작 시 1회) */
   (function(){
@@ -1504,6 +1533,11 @@ queueBraille=function(text){
       announce(`휴지통 ${lastTrashList.length}개. `
         +lastTrashList.slice(0,5).map((p,n)=>`${n+1}. ${pTitle(p)}`).join(". ")
         +(lastTrashList.length>5?". 이하 생략":"")+". 복원하려면 몇 번 복원.");
+    }},
+    {kw:[["완전 삭제",10],["완전히 삭제",10],["영구 삭제",10]],run(){
+      const p=state.pages.find(x=>x.id===state.cur);
+      if(p&&p.trashed)purgePage(state.cur);
+      else announce("완전 삭제는 휴지통에 있는 페이지에서만 됩니다. 먼저 페이지 삭제로 휴지통에 보내세요.");
     }},
     {kw:[["복원해",9],["방금 삭제 취소",10],["삭제 취소",9]],run(){
       const p=state.pages.filter(x=>x.trashed).sort((a,b)=>(b.trashedAt||0)-(a.trashedAt||0))[0];

@@ -98,13 +98,20 @@ try{
   t.ok("휴지통 섹션 표시",sec&&sec.style.display!=="none");
   w.matchCmd("휴지통");
   t.ok("휴지통 낭독",/휴지통 \d+개.*휴지통테스트/.test(status()),status());
-  w.matchCmd("1번 복원");
-  t.ok("번호 복원",/복원했습니다/.test(status()),status());
-  w.matchCmd("페이지 삭제");                             /* 다시 버리고 완전 삭제 */
-  const target=[...d.querySelectorAll("#trashList .chev")].pop();
-  target.click();
+  /* 행 클릭 = 들어가서 확인 → 배너 표시 → 배너에서 복원 */
+  const row=d.querySelector("#trashList .tree-row");
+  row.click();await wait(100);
+  t.ok("휴지통 페이지 열림 안내",/휴지통에 있는 페이지입니다/.test(status()),status());
+  t.ok("배너 표시",!!d.getElementById("trashBanner"));
+  d.getElementById("tbRestore").click();
+  t.ok("배너 복원",/복원했습니다/.test(status()),status());
+  t.ok("배너 제거",!d.getElementById("trashBanner"));
+  /* 다시 버리고 배너에서 음성 완전 삭제 (2단계) */
+  w.matchCmd("페이지 삭제");
+  d.querySelector("#trashList .tree-row").click();await wait(100);
+  w.matchCmd("완전 삭제");
   t.ok("완전 삭제 1단계 확인",/완전히 삭제하려면/.test(status()),status());
-  target.click();
+  w.matchCmd("완전 삭제");
   t.ok("완전 삭제 실행",/완전히 삭제했습니다/.test(status()),status());
 
   console.log("\n[F] 생산성·설정 스모크");
