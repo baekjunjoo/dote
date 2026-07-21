@@ -44,9 +44,15 @@ try{
   ta.value=MSG;ta.dispatchEvent(new w.Event("input",{bubbles:true}));
   await wait(400);
   const sent=rowsToCells(sim.deviceState());
-  const expect=w.KB.brailleCells(MSG).map(x=>[...x].sort((a,b)=>a-b));
-  t.ok("전송 점형 == KB.brailleCells",JSON.stringify(sent)===JSON.stringify(expect),
+  /* v0.22+: 기기에는 [상위 제목 라벨 줄] + 본문이 합성 출력된다 (composeCells와 동일 규칙) */
+  const ctx=[...d.querySelectorAll("#blocks .block")][0].querySelector("textarea").value;   /* 첫 블록 = h1 */
+  const expect=w.BLE.composeCells(ctx,MSG).map(x=>[...x].sort((a,b)=>a-b));
+  while(expect.length&&!expect[expect.length-1].length)expect.pop();
+  t.ok("전송 점형 == 라벨+본문 합성",JSON.stringify(sent)===JSON.stringify(expect),
     "sent="+JSON.stringify(sent.slice(0,4))+" expect="+JSON.stringify(expect.slice(0,4)));
+  t.ok("라벨 줄 경계 정렬(본문이 새 줄 시작)",w.KB.brailleCells(ctx).length<30
+    ? JSON.stringify(sent.slice(30,34))===JSON.stringify(w.KB.brailleCells(MSG).slice(0,4).map(x=>[...x].sort((a,b)=>a-b)))
+    : true);
 
   /* [3] keep-alive → 정지 후 행 차분 (keep-alive 재전송과 분리해 측정) */
   console.log("\n[3] keep-alive·행 차분");
