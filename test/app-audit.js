@@ -94,25 +94,28 @@ try{
   await wait(100);
   w.matchCmd("페이지 삭제");                             /* 1회 = 즉시 휴지통 */
   t.ok("즉시 휴지통 이동",/휴지통으로 옮겼습니다/.test(status()),status());
-  const sec=d.getElementById("trashSec");
-  t.ok("휴지통 섹션 표시",sec&&sec.style.display!=="none");
+  const tb=d.getElementById("trashBtn");
+  t.ok("휴지통 버튼 = 템플릿 바로 아래",tb&&tb.previousElementSibling===d.getElementById("tplBtn"));
   w.matchCmd("휴지통");
   t.ok("휴지통 낭독",/휴지통 \d+개.*휴지통테스트/.test(status()),status());
-  /* 행 클릭 = 들어가서 확인 → 배너 표시 → 배너에서 복원 */
-  const row=d.querySelector("#trashList .tree-row");
-  row.click();await wait(100);
+  t.ok("휴지통 뷰 열림(편집 영역)",d.getElementById("trashView").style.display==="block");
+  /* 뷰에서 제목 클릭 = 들어가서 확인 → 뷰 닫히고 배너 표시 → 배너에서 복원 */
+  d.querySelector("#trashView .tv-title").click();await wait(100);
   t.ok("휴지통 페이지 열림 안내",/휴지통에 있는 페이지입니다/.test(status()),status());
+  t.ok("뷰 닫힘·편집 복귀",d.getElementById("trashView").style.display!=="block");
   t.ok("배너 표시",!!d.getElementById("trashBanner"));
   d.getElementById("tbRestore").click();
   t.ok("배너 복원",/복원했습니다/.test(status()),status());
   t.ok("배너 제거",!d.getElementById("trashBanner"));
-  /* 다시 버리고 배너에서 음성 완전 삭제 (2단계) */
+  /* 다시 버리고 뷰의 완전 삭제 버튼 (2단계) */
   w.matchCmd("페이지 삭제");
-  d.querySelector("#trashList .tree-row").click();await wait(100);
-  w.matchCmd("완전 삭제");
+  tb.click();await wait(50);
+  [...d.querySelectorAll("#trashView .tv-act")].pop().click();
   t.ok("완전 삭제 1단계 확인",/완전히 삭제하려면/.test(status()),status());
-  w.matchCmd("완전 삭제");
+  [...d.querySelectorAll("#trashView .tv-act")].pop().click();
   t.ok("완전 삭제 실행",/완전히 삭제했습니다/.test(status()),status());
+  d.getElementById("trashView").dispatchEvent(new w.KeyboardEvent("keydown",{key:"Escape",bubbles:true}));
+  t.ok("Esc = 편집으로 복귀",d.getElementById("trashView").style.display!=="block");
 
   console.log("\n[H] 템플릿 2단계 다이얼로그");
   w.openTplDlg();await wait(50);

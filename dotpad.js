@@ -16,7 +16,7 @@
    renderTree: [16](보관함)→[5](DotPad 상태)→원본 · matchCmd: [15](숫자 명령)→[2](미스로그)→원본
    openPage: [15](Reader 종료)→[8-13](모바일 접힘)→원본 · blockKey/removeBlock/moveBlock/setType: [16](Undo)→원본 */
 "use strict";
-const DOTE_VERSION="0.25.0 (2026-07-22)";
+const DOTE_VERSION="0.26.0 (2026-07-22)";
 
 /* ───────────── [0] superdot-tts: 검증된 자연스러운 TTS 모듈 로드 ───────────── */
 (function(){
@@ -1403,7 +1403,7 @@ queueBraille=function(text){
     targets.forEach(x=>{x.trashed=true;x.trashedAt=Date.now();x.updated=Date.now();});
     leaveTrashedCur();
     renderTree();save();
-    announce(`${pTitle(p)} 페이지${targets.length>1?` 외 하위 ${targets.length-1}개`:""}를 휴지통으로 옮겼습니다. 사이드바 휴지통에서 복원할 수 있습니다.`);
+    announce(`${pTitle(p)} 페이지${targets.length>1?` 외 하위 ${targets.length-1}개`:""}를 휴지통으로 옮겼습니다. 사이드바의 휴지통에서 복원할 수 있습니다.`);
   };
   function restoreTrash(id){
     const p=state.pages.find(x=>x.id===id);if(!p)return;
@@ -1433,42 +1433,109 @@ queueBraille=function(text){
   }
   window.restoreTrash=restoreTrash;window.purgePage=purgePage;
 
-  /* 휴지통 섹션 렌더 (보관함 아래) */
+  /* 휴지통 UI: 사이드바 내비 버튼(템플릿 아래) + 편집 영역 전체 페이지 뷰 */
+  let tvOpen=false;
+  function trashItems(){
+    return state.pages.filter(p=>p.trashed&&!state.pages.find(q=>q.id===p.parentId&&q.trashed))
+      .sort((a,b)=>(b.trashedAt||0)-(a.trashedAt||0));
+  }
+  function ensureTrashUI(){
+    let btn=document.getElementById("trashBtn");
+    if(!btn){
+      btn=document.createElement("button");btn.className="nav-item";btn.id="trashBtn";
+      btn.innerHTML='<span class="nav-ico" aria-hidden="true">🗑</span><span>휴지통</span><span id="trashCnt" style="margin-left:auto;font-size:11px;font-family:var(--font-mono);color:var(--textDim)"></span>';
+      btn.addEventListener("click",openTrashView);
+      const st=document.createElement("style");
+      st.textContent=`#trashView{display:none;flex:1;overflow-y:auto;padding:40px 48px}
+#trashView h1{font-family:var(--font-en);font-size:24px;font-weight:700;letter-spacing:-0.025em;margin-bottom:6px;color:var(--text)}
+#trashView .tv-sub{font-size:12.5px;color:var(--textDim);margin-bottom:20px}
+#trashView ul{list-style:none;display:flex;flex-direction:column;gap:2px;max-width:640px}
+#trashView .tv-row{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--r-md);border:1px solid transparent}
+#trashView .tv-row:hover,#trashView .tv-row:focus-within{background:var(--surface);border-color:var(--border)}
+#trashView .tv-title{flex:1;font-size:14px;font-weight:500;color:var(--text);text-align:left;padding:4px 0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#trashView .tv-date{font-size:11px;color:var(--textDim);font-family:var(--font-mono);flex:none}
+#trashView .tv-act{font-size:12px;padding:5px 10px;border:1px solid var(--borderStrong);border-radius:var(--r-sm);flex:none;color:var(--text)}
+#trashView .tv-act:hover,#trashView .tv-act:focus-visible{background:var(--accentSoft)}
+#trashView .tv-empty{color:var(--textDim);font-size:13.5px;padding:20px 0}`;
+      document.head.appendChild(st);
+    }
+    const tpl=document.getElementById("tplBtn");
+    if(tpl&&btn.previousElementSibling!==tpl)tpl.insertAdjacentElement("afterend",btn);
+    else if(!btn.parentNode){const nav=document.querySelector(".sidebar-nav");if(nav)nav.appendChild(btn);}
+    let view=document.getElementById("trashView");
+    if(!view){
+      view=document.createElement("div");view.id="trashView";
+      view.setAttribute("role","region");view.setAttribute("aria-label","휴지통");
+      const col=document.getElementById("editorCol");
+      col.insertBefore(view,document.getElementById("editorScroll"));
+      view.addEventListener("keydown",e=>{
+        if(e.key==="Escape"){e.preventDefault();closeTrashView(true);return;}
+        if(e.key!=="ArrowDown"&&e.key!=="ArrowUp")return;
+        e.preventDefault();
+        const rows=[...view.querySelectorAll(".tv-title")];
+        const i=rows.indexOf(document.activeElement);
+        if(rows.length)rows[e.key==="ArrowDown"?(i+1)%rows.length:(i-1+rows.length)%rows.length].focus();
+      });
+    }
+    return {btn,view};
+  }
   function renderTrash(){
     state.pages.forEach(p=>{                           /* 현역 트리에서 숨김 */
       if(!p.trashed)return;
       const li=document.querySelector(`[role="treeitem"][data-id="${p.id}"]`);
       if(li)li.style.display="none";
     });
-    let sec=document.getElementById("trashSec");
-    const items=state.pages.filter(p=>p.trashed&&!state.pages.find(q=>q.id===p.parentId&&q.trashed));
-    if(!sec){
-      sec=document.createElement("div");sec.className="sidebar-section";sec.id="trashSec";
-      sec.innerHTML='<div class="section-header"><span class="sec-label">휴지통</span></div><ul id="trashList"></ul>';
-      const sb=document.getElementById("sidebar");
-      sb.insertBefore(sec,sb.querySelector(".sidebar-footer"));
+    const {btn,view}=ensureTrashUI();
+    const items=trashItems();
+    const cnt=btn.querySelector("#trashCnt");if(cnt)cnt.textContent=items.length||"";
+    btn.setAttribute("aria-label",`휴지통, ${items.length}개 페이지. 엔터를 누르면 휴지통 페이지가 열립니다`);
+    /* 뷰 본문은 항상 최신 상태 유지 (열려 있으면 즉시 반영) */
+    view.innerHTML='<h1>휴지통</h1><div class="tv-sub">30일이 지나면 자동으로 완전 삭제됩니다 · Esc = 편집으로 돌아가기</div>';
+    if(!items.length){
+      const e=document.createElement("div");e.className="tv-empty";e.textContent="휴지통이 비어 있습니다.";view.appendChild(e);
+    }else{
+      const ul=document.createElement("ul");ul.id="trashList";
+      items.forEach((p,n)=>{
+        const li=document.createElement("li");
+        const row=document.createElement("div");row.className="tv-row";
+        const open=document.createElement("button");open.className="tv-title";open.textContent=pTitle(p);
+        open.setAttribute("aria-label",`${pTitle(p)}. ${n+1}/${items.length}. 엔터로 열어서 내용 확인`);
+        open.addEventListener("click",()=>openPage(p.id));
+        const dt=document.createElement("span");dt.className="tv-date";
+        if(p.trashedAt){const d=new Date(p.trashedAt);dt.textContent=`${d.getMonth()+1}/${d.getDate()}`;dt.setAttribute("aria-hidden","true");}
+        const res=document.createElement("button");res.className="tv-act";res.textContent="복원";
+        res.setAttribute("aria-label",`${pTitle(p)} 복원`);
+        res.addEventListener("click",()=>restoreTrash(p.id));
+        const del=document.createElement("button");del.className="tv-act";del.textContent="완전 삭제";
+        del.setAttribute("aria-label",`${pTitle(p)} 완전 삭제 (두 번 실행)`);
+        del.addEventListener("click",()=>purgePage(p.id));
+        row.append(open,dt,res,del);li.appendChild(row);ul.appendChild(li);
+      });
+      view.appendChild(ul);
     }
-    sec.style.display=items.length?"":"none";
-    const ul=sec.querySelector("#trashList");ul.innerHTML="";
-    items.forEach(p=>{
-      const li=document.createElement("li");
-      const row=document.createElement("div");row.className="tree-row";row.tabIndex=0;
-      row.setAttribute("role","button");
-      row.setAttribute("aria-label",`휴지통: ${pTitle(p)}. 엔터로 열어서 내용 확인`);
-      const tt=document.createElement("span");tt.className="tree-title";tt.textContent=pTitle(p);
-      const res=document.createElement("button");res.className="chev";res.textContent="⬆";
-      res.setAttribute("aria-label",`${pTitle(p)} 복원`);
-      res.addEventListener("click",e=>{e.stopPropagation();restoreTrash(p.id);});
-      const del=document.createElement("button");del.className="chev";del.textContent="✕";
-      del.setAttribute("aria-label",`${pTitle(p)} 완전 삭제 (두 번 실행)`);
-      del.addEventListener("click",e=>{e.stopPropagation();purgePage(p.id);});
-      row.append(tt,res,del);
-      row.addEventListener("click",()=>openPage(p.id));      /* 들어가서 확인 후 결정 */
-      row.addEventListener("keydown",e=>{if(e.key==="Enter")openPage(p.id);});
-      li.appendChild(row);ul.appendChild(li);
-    });
+    if(tvOpen){const f=view.querySelector(".tv-title");if(f)f.focus();}
     renderTrashBanner();
   }
+  function openTrashView(){
+    renderTrash();
+    tvOpen=true;
+    const view=document.getElementById("trashView");view.style.display="block";
+    const es=document.getElementById("editorScroll");if(es)es.style.display="none";
+    const bn=document.getElementById("trashBanner");if(bn)bn.style.display="none";
+    const items=trashItems();
+    const f=view.querySelector(".tv-title");if(f)f.focus();
+    announce(items.length
+      ?`휴지통 페이지. ${items.length}개. 위아래 화살표로 이동, 엔터로 열어서 확인, 이어서 복원과 완전 삭제 버튼. Esc로 편집으로 돌아갑니다.`
+      :"휴지통이 비어 있습니다. Esc로 편집으로 돌아갑니다.");
+  }
+  function closeTrashView(focusEditor){
+    if(!tvOpen)return;tvOpen=false;
+    const v=document.getElementById("trashView");if(v)v.style.display="none";
+    const es=document.getElementById("editorScroll");if(es)es.style.display="";
+    const bn=document.getElementById("trashBanner");if(bn)bn.style.display="";
+    if(focusEditor){try{focusBlock(state.focusIdx||0);}catch(e){}announce("편집으로 돌아왔습니다.");}
+  }
+  window.openTrashView=openTrashView;
 
   /* 휴지통 페이지를 열었을 때: 편집기 상단 배너로 상태 안내 + 복원/완전 삭제 */
   function renderTrashBanner(){
@@ -1487,11 +1554,13 @@ queueBraille=function(text){
       bn.querySelector("#tbRestore").addEventListener("click",()=>restoreTrash(state.cur));
       bn.querySelector("#tbPurge").addEventListener("click",()=>purgePage(state.cur));
     }
+    if(tvOpen)bn.style.display="none";
   }
   const _rt4=renderTree;
   renderTree=function(){_rt4();renderTrash();};
   const _openT=openPage;
   openPage=function(id){
+    closeTrashView(false);
     _openT(id);
     const p=state.pages.find(x=>x.id===id);
     if(p&&p.trashed)announce("휴지통에 있는 페이지입니다. 내용을 확인하고 복원 또는 완전 삭제를 선택하세요. 완전 삭제라고 말해도 됩니다.");
@@ -1527,12 +1596,12 @@ queueBraille=function(text){
   };
   RULES.push(
     {kw:[["휴지통",9],["휴지통 열어",10]],run(){
-      lastTrashList=state.pages.filter(p=>p.trashed&&!state.pages.find(q=>q.id===p.parentId&&q.trashed))
-        .sort((a,b)=>(b.trashedAt||0)-(a.trashedAt||0));
-      if(!lastTrashList.length){announce("휴지통이 비어 있습니다.");return;}
-      announce(`휴지통 ${lastTrashList.length}개. `
-        +lastTrashList.slice(0,5).map((p,n)=>`${n+1}. ${pTitle(p)}`).join(". ")
-        +(lastTrashList.length>5?". 이하 생략":"")+". 복원하려면 몇 번 복원.");
+      lastTrashList=trashItems();
+      openTrashView();
+      if(lastTrashList.length)
+        announce(`휴지통 ${lastTrashList.length}개. `
+          +lastTrashList.slice(0,5).map((p,n)=>`${n+1}. ${pTitle(p)}`).join(". ")
+          +(lastTrashList.length>5?". 이하 생략":"")+". 복원하려면 몇 번 복원. Esc로 돌아갑니다.");
     }},
     {kw:[["완전 삭제",10],["완전히 삭제",10],["영구 삭제",10]],run(){
       const p=state.pages.find(x=>x.id===state.cur);
