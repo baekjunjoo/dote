@@ -222,51 +222,78 @@ function applyTemplate(t){
 }
 window.applyTemplate=applyTemplate;
 
-/* ── 템플릿 선택 다이얼로그: 세트(카테고리)별 묶음, 키보드·스크린리더 완결 ── */
-function openTplDlg(){
+/* ── 템플릿 선택 다이얼로그: 2단계(세트 → 템플릿) — 스크린리더 탐색 부담 최소화 ──
+   1단계: 세트 4개만 낭독 → 엔터로 진입. 2단계: 해당 세트 템플릿만.
+   백스페이스/왼쪽 화살표 = 세트 목록으로, Esc = 닫기. */
+const TPL_CATS=[...new Set(PAGE_TEMPLATES.map(t=>t.cat))];
+const TPL_CAT_ICONS={"학생":"🎓","취업":"💼","라이프":"🌱","업무":"🏢"};
+function tplsOf(cat){return PAGE_TEMPLATES.filter(t=>t.cat===cat);}
+function openTplDlg(cat){
   let dlg=document.getElementById("tplDlg");
   if(!dlg){
     dlg=document.createElement("dialog");dlg.id="tplDlg";
     dlg.setAttribute("aria-label","페이지 템플릿 선택");
-    dlg.innerHTML='<div class="dlg-pad"><h2>페이지 템플릿</h2><div id="tplList"></div></div>';
+    dlg.innerHTML='<div class="dlg-pad"><h2 id="tplHead">페이지 템플릿</h2><div id="tplList"></div></div>';
     document.body.appendChild(dlg);
     const st=document.createElement("style");
     st.textContent=`#tplDlg{width:420px;max-width:92vw}
 #tplList{display:flex;flex-direction:column;gap:2px;max-height:420px;overflow-y:auto}
-#tplList .t-cat{font-size:11px;font-weight:500;letter-spacing:.12em;color:var(--textDim);text-transform:uppercase;padding:12px 10px 4px}
 #tplList button{width:100%;display:flex;align-items:center;gap:12px;padding:9px 10px;border-radius:var(--r-md);text-align:left;transition:background var(--tr)}
 #tplList button:hover,#tplList button:focus-visible{background:var(--accentSoft)}
 #tplList .t-ico{width:32px;height:32px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);display:grid;place-items:center;font-size:16px;flex:none}
 #tplList .t-name{font-size:14px;font-weight:500;color:var(--text)}
-#tplList .t-desc{font-size:11.5px;color:var(--textDim)}`;
+#tplList .t-desc{font-size:11.5px;color:var(--textDim)}
+#tplList .t-cnt{font-size:11px;font-family:var(--font-mono);color:var(--textDim);margin-left:4px}
+#tplList .t-back .t-ico{background:transparent;border:none}
+#tplList .t-back .t-name{color:var(--textDim);font-weight:400}`;
     document.head.appendChild(st);
-    const list=dlg.querySelector("#tplList");
-    let lastCat=null;
-    PAGE_TEMPLATES.forEach((t,i)=>{
-      if(t.cat!==lastCat){
-        lastCat=t.cat;
-        const h=document.createElement("div");h.className="t-cat";h.textContent=t.cat+" 세트";
-        h.setAttribute("aria-hidden","true");           /* 세트명은 각 버튼 레이블에 포함 */
-        list.appendChild(h);
-      }
-      const b=document.createElement("button");
-      b.innerHTML=`<span class="t-ico" aria-hidden="true">${t.icon}</span><span><div class="t-name">${t.name}</div><div class="t-desc">${t.desc}</div></span>`;
-      b.setAttribute("aria-label",`${t.cat} 세트, ${t.name} 템플릿. ${t.desc}. ${i+1}/${PAGE_TEMPLATES.length}`);
-      b.addEventListener("click",()=>applyTemplate(t));
-      list.appendChild(b);
-    });
-    dlg.addEventListener("keydown",e=>{                 /* ↑↓ 순환 이동 (버튼만) */
+    const list=dlg.querySelector("#tplList"),head=dlg.querySelector("#tplHead");
+    /* 1단계: 세트 목록 */
+    dlg._cats=function(){
+      dlg.dataset.cat="";head.textContent="페이지 템플릿";
+      list.innerHTML="";
+      TPL_CATS.forEach((c,i)=>{
+        const ts=tplsOf(c);
+        const b=document.createElement("button");
+        b.innerHTML=`<span class="t-ico" aria-hidden="true">${TPL_CAT_ICONS[c]||"▤"}</span><span><div class="t-name">${c} 세트<span class="t-cnt">${ts.length}</span></div><div class="t-desc">${ts.map(t=>t.name).join(" · ")}</div></span>`;
+        b.setAttribute("aria-label",`${c} 세트, 템플릿 ${ts.length}개: ${ts.map(t=>t.name).join(", ")}. ${i+1}/${TPL_CATS.length}`);
+        b.addEventListener("click",()=>dlg._tpls(c));
+        list.appendChild(b);
+      });
+      const f=list.querySelector("button");if(f)f.focus();
+      announce(`페이지 템플릿. 세트 ${TPL_CATS.length}개 — ${TPL_CATS.join(", ")}. 위아래 화살표로 이동, 엔터로 세트를 여세요.`);
+    };
+    /* 2단계: 선택한 세트의 템플릿 */
+    dlg._tpls=function(c){
+      dlg.dataset.cat=c;head.textContent=c+" 세트";
+      list.innerHTML="";
+      const back=document.createElement("button");back.className="t-back";
+      back.innerHTML='<span class="t-ico" aria-hidden="true">←</span><span><div class="t-name">세트 목록으로</div></span>';
+      back.setAttribute("aria-label","뒤로. 세트 목록으로 돌아가기");
+      back.addEventListener("click",()=>dlg._cats());
+      list.appendChild(back);
+      const ts=tplsOf(c);
+      ts.forEach((t,i)=>{
+        const b=document.createElement("button");
+        b.innerHTML=`<span class="t-ico" aria-hidden="true">${t.icon}</span><span><div class="t-name">${t.name}</div><div class="t-desc">${t.desc}</div></span>`;
+        b.setAttribute("aria-label",`${t.name} 템플릿. ${t.desc}. ${i+1}/${ts.length}`);
+        b.addEventListener("click",()=>applyTemplate(t));
+        list.appendChild(b);
+      });
+      const first=list.querySelectorAll("button")[1];if(first)first.focus();
+      announce(`${c} 세트, 템플릿 ${ts.length}개. 첫 번째: ${ts[0].name}. 백스페이스를 누르면 세트 목록으로 돌아갑니다.`);
+    };
+    dlg.addEventListener("keydown",e=>{
+      if((e.key==="Backspace"||e.key==="ArrowLeft")&&dlg.dataset.cat){e.preventDefault();dlg._cats();return;}
       if(e.key!=="ArrowDown"&&e.key!=="ArrowUp")return;
       e.preventDefault();
       const bs=[...list.querySelectorAll("button")];
       const i=bs.indexOf(document.activeElement);
-      const n=e.key==="ArrowDown"?(i+1)%bs.length:(i-1+bs.length)%bs.length;
-      bs[n].focus();
+      bs[e.key==="ArrowDown"?(i+1)%bs.length:(i-1+bs.length)%bs.length].focus();
     });
   }
   try{dlg.showModal();}catch(e){dlg.setAttribute("open","");}
-  const first=dlg.querySelector("#tplList button");if(first)first.focus();
-  announce(`페이지 템플릿 ${PAGE_TEMPLATES.length}개, 학생·취업·라이프·업무 4개 세트. 위아래 화살표로 이동, 엔터로 선택. 첫 번째: ${PAGE_TEMPLATES[0].cat} 세트 ${PAGE_TEMPLATES[0].name}.`);
+  if(cat&&TPL_CATS.includes(cat))dlg._tpls(cat);else dlg._cats();
 }
 
 /* ── 엔진: 글자 수 제한 실시간 경고 (limit 블록) ── */
@@ -353,6 +380,7 @@ function openTplDlg(){
   }
   RULES.push(
     {kw:[["템플릿",6]],run(){openTplDlg();}},
+    ...TPL_CATS.map(c=>({kw:[[c+" 템플릿",8],[c+" 세트",8]],run(){openTplDlg(c);}})),
     ...PAGE_TEMPLATES.map(t=>({kw:[[t.name+" 템플릿",9]],run(){applyTemplate(t);}}))
   );
   window.openTplDlg=openTplDlg;window.PAGE_TEMPLATES=PAGE_TEMPLATES;   /* 디버깅·테스트용 */

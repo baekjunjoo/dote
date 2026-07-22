@@ -114,6 +114,19 @@ try{
   w.matchCmd("완전 삭제");
   t.ok("완전 삭제 실행",/완전히 삭제했습니다/.test(status()),status());
 
+  console.log("\n[H] 템플릿 2단계 다이얼로그");
+  w.openTplDlg();await wait(50);
+  const tl=d.getElementById("tplList");
+  t.ok("1단계 = 세트 4개만",tl.querySelectorAll("button").length===4,tl.querySelectorAll("button").length+"개");
+  tl.querySelector("button").click();await wait(50);
+  t.ok("2단계 진입(뒤로+템플릿)",tl.querySelectorAll("button").length>=2&&!!tl.querySelector(".t-back"));
+  tl.querySelector(".t-back").click();await wait(50);
+  t.ok("뒤로 = 세트 목록 복귀",tl.querySelectorAll("button").length===4);
+  d.getElementById("tplDlg").removeAttribute("open");
+  w.matchCmd("업무 템플릿");await wait(50);
+  t.ok("음성 세트 바로 열기",d.getElementById("tplDlg").dataset.cat==="업무");
+  d.getElementById("tplDlg").removeAttribute("open");
+
   console.log("\n[F] 생산성·설정 스모크");
   w.matchCmd("개요");t.ok("개요 응답",/개요\.|제목 블록이 없습니다/.test(status()));
   w.matchCmd("글자 수");t.ok("글자 수(공백제외 포함)",/공백 빼면 \d+자\./.test(status()));
